@@ -18,7 +18,7 @@ const Home = ({ subApps, onRemoveSubApp }: HomeProps) => {
 
   return (
     <section className="home-page">
-      <h1 className="home-title">Garfish 父容器</h1>
+      <h1 className="home-title">gipsy</h1>
       <div className="app-grid">
         {subApps.map((app) => (
           <div

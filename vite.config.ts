@@ -8,8 +8,8 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       manifest: {
-        name: "Garfish Parent Container",
-        short_name: "Garfish",
+        name: "gipsy",
+        short_name: "gipsy",
         start_url: "/",
         display: "standalone",
         background_color: "#f8fafc",
