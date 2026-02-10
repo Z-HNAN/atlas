@@ -1,36 +1,26 @@
-## ADDED Requirements
+# pwa-support
 
-### Requirement: PWA manifest is provided
-The container SHALL serve a valid web app manifest with name, short_name, icons, start_url, display mode, and theme/background colors.
+## 规范目标
+- 门户支持 PWA（manifest + service worker）。
+- 门户资源可离线启动，并能提示用户刷新以升级到新版本。
 
-#### Scenario: Manifest available
-- **WHEN** the browser requests `/manifest.webmanifest`
-- **THEN** the response SHALL be a valid manifest referencing existing icon assets
+## 功能与行为
 
-### Requirement: Service worker is registered by the shell
-The container shell MUST register a service worker on first load in supported browsers.
+### 要求：提供 manifest
+- **当** 浏览器请求 `/manifest.webmanifest`
+- **则** 返回合法 manifest，包含 name/short_name、icons、start_url、display、theme/background color
 
-#### Scenario: Supported browser registration
-- **WHEN** the shell loads in a browser that supports service workers
-- **THEN** the service worker registration SHALL be attempted once per page load
+### 要求：注册 service worker
+- **当** 门户在支持 service worker 的浏览器中首次加载
+- **则** 尝试注册 service worker
 
-### Requirement: Shell assets are precached for offline startup
-The service worker SHALL precache the built shell assets required to render the home route.
+### 要求：离线可启动
+- **当** 用户离线打开已安装应用或访问门户
+- **则** 门户 Shell 可使用预缓存资源渲染基础界面
 
-#### Scenario: Offline startup
-- **WHEN** the user opens the installed app or site while offline
-- **THEN** the shell UI SHALL render using precached assets without network requests
+### 要求：可提示更新
+- **当** 检测到新版本 service worker 已就绪
+- **则** 门户向用户展示“可刷新更新”的提示，并提供刷新操作
 
-### Requirement: Update-ready state is surfaced in UI
-When a new service worker version is available, the shell MUST surface a user-facing update-ready prompt.
-
-#### Scenario: New version available
-- **WHEN** the service worker detects an updated precache
-- **THEN** the UI SHALL notify the user and provide an action to refresh
-
-### Requirement: Service worker does not cache sub-app runtime data by default
-The service worker MUST avoid runtime caching of sub-app network requests unless explicitly configured.
-
-#### Scenario: Sub-app request
-- **WHEN** a sub-app makes a network request at runtime
-- **THEN** the request SHALL be passed through without service worker runtime caching
+### 约束：默认不做运行时缓存
+- 门户默认只做构建产物的预缓存，不应对运行时请求做额外缓存策略（除非明确配置）。

@@ -10,6 +10,7 @@ dist/
 build/
 .next/
 out/
+dev-dist/
 
 # IDE
 .vscode/

@@ -1,12 +1,12 @@
-import type { SubApp } from "../types";
+import type { AppConfig } from "../types";
 
-const STORAGE_KEY = "garfish-subapps";
+const STORAGE_KEY = "gipsy-apps";
 
-export const loadSubApps = (): SubApp[] => {
+export const loadApps = (): AppConfig[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as SubApp[];
+    const parsed = JSON.parse(raw) as AppConfig[];
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((item) => item?.name && item?.url);
   } catch {
@@ -14,6 +14,6 @@ export const loadSubApps = (): SubApp[] => {
   }
 };
 
-export const saveSubApps = (apps: SubApp[]) => {
+export const saveApps = (apps: AppConfig[]) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(apps));
 };

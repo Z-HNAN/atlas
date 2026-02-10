@@ -1,4 +1,4 @@
-export type SubApp = {
+export type AppConfig = {
   name: string;
   url: string;
 };

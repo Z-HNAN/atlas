@@ -1,12 +1,12 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { SubApp } from "../types";
+import type { AppConfig } from "../types";
 
 type SettingsProps = {
-  onAddSubApp: (app: SubApp) => void;
+  onAddApp: (app: AppConfig) => void;
 };
 
-const Settings = ({ onAddSubApp }: SettingsProps) => {
+const Settings = ({ onAddApp }: SettingsProps) => {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -31,7 +31,7 @@ const Settings = ({ onAddSubApp }: SettingsProps) => {
       return;
     }
 
-    onAddSubApp({ name: trimmedName, url: trimmedUrl });
+    onAddApp({ name: trimmedName, url: trimmedUrl });
     navigate("/");
   };
 
@@ -41,22 +41,22 @@ const Settings = ({ onAddSubApp }: SettingsProps) => {
 
   return (
     <section className="settings-page">
-      <h1 className="page-title">添加子应用</h1>
+      <h1 className="page-title">添加应用</h1>
 
       <form className="form-grid" onSubmit={handleSubmit}>
         <div className="form-field">
-          <label htmlFor="subapp-name">name</label>
+          <label htmlFor="app-name">name</label>
           <input
-            id="subapp-name"
+            id="app-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="例如：订单系统"
           />
         </div>
         <div className="form-field">
-          <label htmlFor="subapp-url">url</label>
+          <label htmlFor="app-url">url</label>
           <input
-            id="subapp-url"
+            id="app-url"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             placeholder="例如：https://example.com/"
