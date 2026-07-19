@@ -1,0 +1,10 @@
+node_modules
+dist
+dev-dist
+coverage
+package-lock.json
+.github/prompts
+.github/skills
+openspec/changes/archive/2026-02-*
+openspec/specs/apps
+openspec/specs/portal-shell

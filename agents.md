@@ -1,83 +1,72 @@
-# Agents 指导
+# Todo Seed / Personal Web Seed Codex 协作指南
 
-本项目为 openspec 驱动。以下内容用于指导在本仓库内生成规范、设计、提案与任务等文档的写作与提交流程。**所有产出必须使用中文表达**。
+本项目采用 OpenSpec 驱动并由 Codex 辅助开发。所有规范、设计、提案、任务、代码注释和面向用户的文案必须使用中文表达。
 
-## 目标
-- 统一 openspec 文档产出标准。
-- 保证设计、提案、任务拆解可追溯、可审核、可执行。
-- 与现有目录结构保持一致。
+当前默认参考业务是 Local-first Todo List；DeepSeek BYOK 用于把任务拆解为子任务。后续从该种子派生的项目继续以 Codex + OpenSpec 为默认开发方式，Todo 是可运行参考，不是必须保留的业务功能。
 
-## 目录约定
-- 规范目录：openspec/specs/...
-- 变更归档：openspec/changes/archive/YYYY-MM-DD-<topic>/
-  - design.md（设计文档）
-  - proposal.md（提案文档）
-  - tasks.md（任务拆解）
-  - specs/<spec-name>/spec.md（对应规范）
+## 架构不变量
 
-> 新增主题时，请在 changes/archive 下创建新的日期目录，并同步更新 specs 目录。
+- 核心功能必须 Local-first：无网络、未登录、未配置 Supabase 时仍可完整使用本地功能。
+- UI 不得直接操作 LocalStorage、sessionStorage、Supabase 表或具体第三方 API URL。
+- 持久化数据和外部响应必须通过 Zod 校验；TypeScript 保持 strict，禁止使用显式 `any` 绕过检查。
+- 正式业务数据只能保存在 `LocalAppEnvelope.payload`；API Key、认证 Token 和设备偏好不得进入 Payload、云快照或导出文件。
+- 每次业务数据修改必须递增 dataVersion、更新 updatedAt 并设置 `sync.dirty = true`。
+- schemaVersion 变化必须提供顺序迁移；迁移和导入覆盖前必须备份，失败时不得静默丢弃数据。
+- Supabase 是可选增强，默认关闭；浏览器中禁止使用 secret、service role、数据库密码或其它私密凭证。
+- 云端更新必须带 expectedRemoteVersion，禁止用无条件 upsert 静默覆盖；冲突时禁止自动合并或自动上传。
+- 第三方能力必须通过 ExternalApiProvider；Key 默认只进 sessionStorage，用户主动选择后才可持久化，错误和日志不得包含 Key。
+- 不提前引入 Serverless、IndexedDB、复杂状态管理、CRDT 或业务数据库；达到 README 中的升级条件后单独立项。
 
-## 文档生成要求（必须中文）
-### 1) 设计文档（design.md）
-**内容结构建议：**
-1. 背景与目标
-2. 现状分析
-3. 设计方案（架构/组件/流程）
-4. 关键细节（数据结构、接口、状态流转）
-5. 风险与权衡
-6. 里程碑/验收标准
+## 目录边界
 
-**写作要求：**
-- 用中文清晰描述设计动机与方案。
-- 提供必要的示意与流程描述（可用文字或 mermaid）。
-- 明确与现有实现的关系（新增/替换/兼容）。
+- `src/app`：应用装配、Router 和全局 Provider。
+- `src/features/<name>`：业务功能，包含组件、Hook、Schema、Repository 配置和类型。
+- `src/features/todos`：当前 Todo 参考业务及 DeepSeek 任务拆解 Provider；派生项目替换业务时应整体迁移到新的 Feature 边界。
+- `src/lib/local-data`：Envelope、Repository、迁移、导入导出和容量计算。
+- `src/lib/api-keys`：BYOK Key Store。
+- `src/lib/sync`：与云厂商无关的同步协议；Supabase 实现只能依赖该协议。
+- `src/lib/supabase`：按需加载的 Supabase 客户端；云同步关闭时不得建立连接。
+- `src/lib/providers`：第三方 API Provider 协议。
+- `src/lib/errors`：统一错误模型，错误信息不得泄露 Key 或完整私密数据。
+- `tests/unit` 与 `tests/integration`：基础设施和业务生命周期验证。
+- `supabase/migrations`：可审计的数据库变更与 RLS。
 
-### 2) 提案文档（proposal.md）
-**内容结构建议：**
-1. 问题定义
-2. 目标与非目标
-3. 方案对比
-4. 推荐方案
-5. 影响范围（模块、接口、依赖）
-6. 兼容性与迁移计划
+## OpenSpec 流程
 
-**写作要求：**
-- 方案对比需含优缺点与选择理由。
-- 明确影响范围与迁移策略。
+1. 确认主题，使用 `YYYY-MM-DD-<topic>` 命名。
+2. 在 `openspec/changes/archive/<topic>/` 创建或更新：
+   - `proposal.md`：问题、目标与非目标、方案对比、推荐方案、影响和迁移。
+   - `design.md`：背景、现状、架构、关键细节、风险权衡和验收标准。
+   - `tasks.md`：可执行任务、优先级、依赖和验收条件。
+   - `specs/<capability>/spec.md`：本次能力规范。
+3. 同步更新 `openspec/specs/<capability>/spec.md` 主规范。
+4. 规范确认后再实现；实现变化时同步修正规范，禁止文档与代码长期不一致。
+5. 完成后核对全部任务、兼容策略和验收条件。
 
-### 3) 任务拆解（tasks.md）
-**内容结构建议：**
-- 总体里程碑
-- 分阶段任务清单（含负责人/优先级/验收条件）
-- 依赖项与风险
+## Codex 实施原则
 
-**写作要求：**
-- 任务粒度可执行、可验收。
-- 标明关键依赖与阻塞因素。
+- 开始前阅读相关 OpenSpec、README、现有测试和当前工作区差异。
+- 先沿现有 Feature 边界扩展；只有种子规范明确要求或出现第二个真实使用方时才抽取通用层。
+- React 组件只负责渲染和交互编排，校验、存储、同步和 Provider 逻辑放到对应基础设施。
+- 所有破坏性操作必须有用户确认；导入、迁移、清空和云端覆盖必须有恢复路径。
+- 不输出或记录 API Key；不得将 `.env`、用户导出数据或真实凭证提交到仓库。
+- Codex 在交付前必须执行并报告：
 
-### 4) 规范文档（spec.md）
-**内容结构建议：**
-1. 术语与定义
-2. 规范目标
-3. 功能与非功能要求
-4. 行为与接口约束
-5. 示例与边界条件
-6. 兼容性与版本策略
+```bash
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run format:check
+npm run build
+```
 
-**写作要求：**
-- 规范应可用于实现与测试。
-- 示例需可操作、无歧义。
+本地启动、云配置、OpenSpec 命令、Codex 请求模板和派生步骤统一记录在 `START.md`；影响这些流程的变更必须同步更新指南。
 
-## 生成与更新流程
-1. 确认主题与命名（建议：YYYY-MM-DD-<topic>）。
-2. 在 openspec/changes/archive 下创建目录与文档。
-3. 在 openspec/specs 中创建或更新对应规范。
-4. 设计、提案、任务、规范必须保持一致性。
-5. 变更完成后自检：结构完整、语言统一为中文、内容无矛盾。
+## 规范文档质量清单
 
-## 质量自检清单
-- [ ] 全部文档为中文表达
-- [ ] 设计文档包含风险与权衡
-- [ ] 提案文档包含方案对比
-- [ ] 任务拆解具备验收条件
-- [ ] 规范文档可直接指导实现
+- [ ] 全部文档为中文表达。
+- [ ] 设计包含风险与权衡。
+- [ ] 提案包含方案对比与迁移策略。
+- [ ] 任务具备负责人、优先级和验收条件。
+- [ ] 规范可直接指导实现和测试。
+- [ ] 数据、安全、离线和兼容边界没有互相矛盾。

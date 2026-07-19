@@ -15,7 +15,7 @@ export const initPwa = () => {
     },
     onOfflineReady() {
       window.dispatchEvent(new Event("pwa:offline-ready"));
-    }
+    },
   });
 };
 

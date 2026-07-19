@@ -1,20 +1,18 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  项目：Todo Seed，Personal Web Seed 的 Local-first Todo 参考实现，保留稳定 appId gipsy 以兼容既有数据。
+  技术栈：Vite、React、严格 TypeScript、React Router、Tailwind CSS、Zod、Vitest、PWA。
+  架构：Local-first，Todo 业务数据使用版本化 JSON Envelope 保存到 LocalStorage；Supabase Magic Link 和乐观并发快照同步可选且默认关闭；DeepSeek 任务拆解使用 BYOK Provider。
+  安全：所有持久化和外部数据经 Zod 校验；API Key 不进入 Payload、导出或云端；前端禁止私密凭证。
+  协作：所有产出使用中文；Codex 实现前先维护 OpenSpec，交付前运行 typecheck、lint、test、format:check、build，并维护 START 指南。
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - 必须包含目标与非目标、至少两个方案的优缺点、影响范围和兼容迁移计划。
+  design:
+    - 必须说明 Envelope 与业务 Payload 的边界、失败恢复路径、风险权衡和验收标准。
+  tasks:
+    - 每项任务必须标明优先级、执行方和可验证的验收条件。
+  specs:
+    - 必须包含离线行为、持久化校验、安全边界和版本兼容要求。

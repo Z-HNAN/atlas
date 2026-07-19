@@ -1,260 +1,431 @@
-:root {
-  color-scheme: light;
-  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
-  color: #0f172a;
-  background-color: #f8fafc;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+    color: theme("colors.slate.900");
+    background-color: theme("colors.slate.50");
+  }
+
+  body {
+    @apply m-0 min-w-80 bg-slate-50 text-slate-900 antialiased;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  label:focus-within {
+    @apply outline-none ring-2 ring-emerald-500 ring-offset-2;
+  }
 }
 
-* {
-  box-sizing: border-box;
-}
+@layer components {
+  .app-shell {
+    @apply flex min-h-screen flex-col;
+  }
 
-body {
-  margin: 0;
-}
+  .app-main-home {
+    @apply flex-1 bg-slate-50 px-6 py-10;
+  }
 
-.pwa-update-banner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 10px 16px;
-  background: #0f172a;
-  color: #f8fafc;
-  font-weight: 600;
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
+  .pwa-update-banner,
+  .offline-banner,
+  .error-banner {
+    @apply sticky top-0 z-20 flex items-center justify-center gap-4 px-4 py-2.5;
+  }
 
-.pwa-update-btn {
-  border: none;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: #22c55e;
-  color: #0f172a;
-  font-weight: 700;
-  cursor: pointer;
-}
+  .pwa-update-banner {
+    @apply bg-slate-900 font-semibold text-slate-50;
+  }
 
-.pwa-update-btn:hover {
-  filter: brightness(1.05);
-}
+  .offline-banner {
+    @apply bg-amber-100 text-sm font-medium text-amber-950;
+  }
 
-.app-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
+  .error-banner {
+    @apply justify-between bg-red-100 text-sm text-red-950;
+  }
 
-.app-main {
-  flex: 1;
-  padding: 24px;
-}
+  .error-banner p {
+    @apply m-0 mt-1;
+  }
 
-.app-main-home {
-  flex: 1;
-  padding: 40px 24px;
-  background: #f8fafc;
-}
+  .banner-actions {
+    @apply flex shrink-0 gap-2;
+  }
 
-.home-page {
-  max-width: 1200px;
-  margin: 0 auto;
-}
+  .banner-btn {
+    @apply rounded-lg border border-current px-3 py-1.5 font-semibold hover:bg-white/50;
+  }
 
-.home-title {
-  font-size: 32px;
-  font-weight: 700;
-  margin: 0 0 32px;
-  color: #0f172a;
-}
+  .pwa-update-btn {
+    @apply cursor-pointer rounded-full border-0 bg-emerald-500 px-4 py-2 font-bold text-slate-900 hover:brightness-105;
+  }
 
-.app-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 14px;
-  margin-bottom: 24px;
-}
+  .home-page {
+    @apply mx-auto max-w-6xl;
+  }
 
-.app-card {
-  background: #ffffff;
-  border-radius: 14px;
-  padding: 18px 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-  min-height: 110px;
-  position: relative;
-}
+  .home-header,
+  .settings-header {
+    @apply mb-8 flex items-center justify-between gap-4;
+  }
 
-.app-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
-}
+  .eyebrow {
+    @apply mb-1 mt-0 text-xs font-bold tracking-[0.16em] text-emerald-700;
+  }
 
-.app-card-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #0f172a;
-  text-align: center;
-}
+  .home-title {
+    @apply m-0 text-3xl font-bold text-slate-900;
+  }
 
-.delete-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 22px;
-  height: 22px;
-  border-radius: 11px;
-  border: none;
-  background: rgba(15, 23, 42, 0.08);
-  color: #0f172a;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
+  .home-subtitle {
+    @apply mb-0 mt-2 max-w-2xl text-sm leading-6 text-slate-600;
+  }
 
-.delete-btn:hover {
-  background: #fee2e2;
-  color: #b91c1c;
-}
+  .todo-page {
+    @apply max-w-4xl;
+  }
 
-.add-card {
-  border: 2px dashed #cbd5e1;
-  background: #f8fafc;
-}
+  .todo-stats {
+    @apply mb-5 grid grid-cols-3 gap-3;
+  }
 
-.add-card:hover {
-  border-color: #22c55e;
-  background: #f0fdf4;
-}
+  .todo-stats > div {
+    @apply flex items-baseline justify-between rounded-2xl bg-slate-900 px-5 py-4 text-slate-50 shadow-card;
+  }
 
-.add-icon {
-  font-size: 32px;
-  color: #22c55e;
-  line-height: 1;
-  margin-bottom: 8px;
-}
+  .todo-stats strong {
+    @apply text-2xl;
+  }
 
-.add-text {
-  font-size: 14px;
-  color: #64748b;
-  font-weight: 500;
+  .todo-stats span {
+    @apply text-xs font-semibold uppercase tracking-wide text-slate-300;
+  }
+
+  .todo-composer,
+  .todo-list-section {
+    @apply mb-5 rounded-2xl bg-white p-6 shadow-card;
+  }
+
+  .section-heading-row,
+  .todo-list-toolbar {
+    @apply mb-5 flex items-start justify-between gap-4;
+  }
+
+  .section-heading-row .section-title,
+  .todo-list-toolbar .section-title {
+    @apply mb-0;
+  }
+
+  .todo-form {
+    @apply grid gap-4;
+  }
+
+  .todo-form-actions {
+    @apply mt-1;
+  }
+
+  .text-btn {
+    @apply cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-emerald-700 underline-offset-4 hover:underline;
+  }
+
+  .danger-text-btn {
+    @apply text-red-700;
+  }
+
+  .suggestion-panel {
+    @apply mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4;
+  }
+
+  .suggestion-heading {
+    @apply flex items-baseline justify-between gap-4 text-emerald-950;
+  }
+
+  .suggestion-heading span {
+    @apply text-xs text-emerald-700;
+  }
+
+  .suggestion-panel ol {
+    @apply my-4 space-y-2 pl-5 text-sm leading-6 text-emerald-950;
+  }
+
+  .filter-group {
+    @apply flex rounded-xl bg-slate-100 p-1;
+  }
+
+  .filter-btn {
+    @apply cursor-pointer rounded-lg border-0 bg-transparent px-3 py-2 text-xs font-semibold text-slate-600 transition hover:text-slate-900;
+  }
+
+  .filter-btn[aria-pressed="true"] {
+    @apply bg-white text-slate-900 shadow-sm;
+  }
+
+  .todo-list {
+    @apply m-0 list-none divide-y divide-slate-100 p-0;
+  }
+
+  .todo-item {
+    @apply flex items-start gap-3 py-4 first:pt-1 last:pb-1;
+  }
+
+  .todo-check {
+    @apply mt-0.5 flex cursor-pointer items-center;
+  }
+
+  .todo-check input {
+    @apply h-5 w-5 cursor-pointer accent-emerald-600;
+  }
+
+  .todo-content {
+    @apply min-w-0 flex-1;
+  }
+
+  .todo-content strong {
+    @apply block break-words text-sm leading-6 text-slate-900;
+  }
+
+  .todo-content p {
+    @apply mb-0 mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-500;
+  }
+
+  .todo-item.is-completed .todo-content strong {
+    @apply text-slate-400 line-through;
+  }
+
+  .todo-item.is-completed .todo-content p {
+    @apply text-slate-400;
+  }
+
+  .todo-delete-btn {
+    @apply cursor-pointer rounded-lg border-0 bg-transparent px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-red-50 hover:text-red-700;
+  }
+
+  .todo-empty {
+    @apply rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center;
+  }
+
+  .todo-empty strong {
+    @apply text-sm text-slate-800;
+  }
+
+  .todo-empty p {
+    @apply mx-auto mb-0 mt-2 max-w-lg text-sm leading-6 text-slate-500;
+  }
+
+  .clear-completed-row {
+    @apply mt-4 flex justify-end;
+  }
+
+  .settings-page {
+    @apply mx-auto max-w-3xl rounded-2xl bg-white p-8 shadow-card;
+  }
+
+  .page-title {
+    @apply m-0 text-2xl font-bold;
+  }
+
+  .settings-section {
+    @apply border-t border-slate-200 py-6 first:border-t-0 first:pt-0;
+  }
+
+  .settings-section-title {
+    @apply mb-4 mt-0 text-lg font-bold;
+  }
+
+  .form-grid {
+    @apply grid gap-3;
+  }
+
+  .form-field {
+    @apply flex flex-col gap-1.5;
+  }
+
+  .form-field label {
+    @apply text-sm font-semibold text-slate-700;
+  }
+
+  .form-field input,
+  .form-field textarea {
+    @apply rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-emerald-500;
+  }
+
+  .form-field textarea {
+    @apply resize-y leading-6;
+  }
+
+  .form-actions,
+  .data-actions {
+    @apply flex flex-wrap justify-end gap-3;
+  }
+
+  .settings-note {
+    @apply my-3 text-sm leading-6 text-slate-600;
+  }
+
+  .settings-note code {
+    @apply rounded bg-slate-100 px-1 py-0.5 text-xs text-slate-800;
+  }
+
+  .checkbox-field {
+    @apply my-3 flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700;
+  }
+
+  .checkbox-field input {
+    @apply h-4 w-4 accent-emerald-600;
+  }
+
+  .inline-action-btn {
+    @apply self-start py-2 text-sm;
+  }
+
+  .cloud-actions {
+    @apply mt-4 justify-start;
+  }
+
+  .compact-actions {
+    @apply mt-4;
+  }
+
+  .conflict-panel {
+    @apply mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950;
+  }
+
+  .conflict-panel p {
+    @apply mb-4 mt-2;
+  }
+
+  .primary-btn,
+  .secondary-btn,
+  .danger-btn {
+    @apply cursor-pointer rounded-xl border-0 px-4 py-2.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .primary-btn {
+    @apply bg-slate-900 text-slate-50 hover:bg-slate-700;
+  }
+
+  .secondary-btn {
+    @apply bg-slate-100 text-slate-900 hover:bg-slate-200;
+  }
+
+  .danger-btn {
+    @apply bg-red-100 text-red-800 hover:bg-red-200;
+  }
+
+  .metadata-grid {
+    @apply grid grid-cols-2 gap-3 md:grid-cols-3;
+  }
+
+  .metadata-grid > div {
+    @apply rounded-xl bg-slate-50 p-3;
+  }
+
+  .metadata-grid dt {
+    @apply text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .metadata-grid dd {
+    @apply m-0 mt-1 break-words text-sm font-semibold text-slate-900;
+  }
+
+  .capacity-hint {
+    @apply my-4 rounded-lg px-3 py-2 text-sm;
+  }
+
+  .capacity-normal {
+    @apply bg-emerald-50 text-emerald-800;
+  }
+
+  .capacity-warning {
+    @apply bg-amber-50 text-amber-800;
+  }
+
+  .capacity-critical {
+    @apply bg-red-50 text-red-800;
+  }
+
+  .file-btn {
+    @apply inline-flex items-center;
+  }
+
+  .file-btn input {
+    @apply sr-only;
+  }
+
+  .form-error,
+  .form-success {
+    @apply mt-4 rounded-lg px-3 py-2 text-sm;
+  }
+
+  .form-error {
+    @apply bg-red-50 text-red-700;
+  }
+
+  .form-success {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+
+  .page-card {
+    @apply mx-auto max-w-2xl rounded-2xl bg-white p-6 shadow-card;
+  }
+
+  .section-title {
+    @apply mb-3 mt-0 text-xl;
+  }
 }
 
 @media (max-width: 420px) {
   .app-main-home {
-    padding: 28px 16px;
+    @apply px-4 py-7;
+  }
+
+  .home-header,
+  .settings-header {
+    @apply mb-5 items-start;
   }
 
   .home-title {
-    font-size: 26px;
-    margin-bottom: 18px;
+    @apply text-2xl;
   }
 
-  .app-grid {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 12px;
+  .todo-stats > div {
+    @apply flex-col gap-1 px-4;
   }
 
-  .app-card {
-    min-height: 104px;
-    padding: 16px 12px;
+  .section-heading-row,
+  .todo-list-toolbar {
+    @apply flex-col;
   }
-}
 
-.empty-hint {
-  text-align: center;
-  color: #64748b;
-  font-size: 16px;
-}
+  .filter-group {
+    @apply w-full;
+  }
 
-.settings-page {
-  max-width: 600px;
-  margin: 0 auto;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-}
+  .filter-btn {
+    @apply flex-1;
+  }
 
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  margin: 0 0 24px;
-}
+  .settings-page {
+    @apply p-5;
+  }
 
-.form-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-}
+  .metadata-grid {
+    @apply grid-cols-1;
+  }
 
-.secondary-btn {
-  background: #f1f5f9;
-  color: #0f172a;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.page-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
-}
-
-.section-title {
-  font-size: 20px;
-  margin: 0 0 12px;
-}
-
-
-.form-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-field input {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #cbd5f5;
-  font-size: 14px;
-}
-
-.form-error {
-  color: #dc2626;
-  font-size: 13px;
-}
-
-.primary-btn {
-  background: #0f172a;
-  color: #f8fafc;
-  border: none;
-  padding: 10px 16px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.empty-state {
-  padding: 24px;
-  border-radius: 12px;
-  border: 1px dashed #cbd5e1;
-  background: #f8fafc;
-  margin: 24px;
+  .error-banner {
+    @apply items-start;
+  }
 }
