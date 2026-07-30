@@ -9,7 +9,7 @@
 ## 已交付能力
 
 - Dashboard、旅行列表、AI/手工创建、旅行详情、世界收藏地图、登录和设置页面。
-- DeepSeek BYOK：会话存储、主动持久化、清除、JSON Output、Zod 校验和一次修复。
+- DeepSeek BYOK：C 端直连、当前官方模型、会话存储、主动持久化、清除、JSON Output、Zod 校验、一次修复和分层错误诊断。
 - Nominatim：串行队列、至少 1.1 秒间隔、国家/地区/搜索词评分、缓存、歧义与失败处理。
 - 人工确认：名称、搜索词、坐标、增删、顺序、推荐理由和地图 Popup。
 - 旅行记录：四种状态、地点到访、地点备注、1～10 分评分和旅行总结。
@@ -24,7 +24,7 @@
 ```text
 typecheck       通过
 lint            通过（0 warning）
-test            16 个测试文件、44 项测试全部通过
+test            16 个测试文件、52 项测试全部通过
 format:check    通过
 build           通过
 OpenSpec        9 项当前主规范 strict 校验通过
@@ -48,7 +48,7 @@ OpenSpec        9 项当前主规范 strict 校验通过
 
 以下项目需要用户账号、本机软件或生产项目，仓库内自动测试无法代替：
 
-1. 使用真实 DeepSeek Key 验证当前账号的模型权限和浏览器 CORS。
+1. 使用真实 DeepSeek Key 验证当前账号的余额和模型权限；官方端点 CORS 已用不含真实凭证的预检与 401 响应验证。
 2. 在 Supabase 生产项目执行两份 migration，并写入 owner 用户 UUID。
 3. 使用两个账号验证公开读取、非 owner 禁止写入和私有快照隔离。
 4. 使用富士山—河口湖—箱根—东京湾路线导出 PLN，在 Sky4Sim 中核对顺序和坐标。

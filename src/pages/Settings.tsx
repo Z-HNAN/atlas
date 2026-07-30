@@ -108,6 +108,11 @@ const Settings = ({
             默认只保存到本次浏览器会话。只有你主动勾选后才会持久保存在此浏览器；Key
             不进入旅行数据、导出文件、Supabase 或日志。
           </p>
+          <p className="settings-note">
+            当前浏览器直连地址：<code>{APP_CONFIG.deepSeekBaseUrl}</code>
+            ；模型：<code>{APP_CONFIG.deepSeekModel}</code>
+            。官方端点当前支持 C 端跨域请求，无需项目共享 Key。
+          </p>
           <label className="form-field">
             <span>DeepSeek API Key</span>
             <input

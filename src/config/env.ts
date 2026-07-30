@@ -33,7 +33,7 @@ const environmentSchema = z
       .trim()
       .min(1)
       .optional()
-      .default("deepseek-chat"),
+      .default("deepseek-v4-pro"),
     VITE_DEEPSEEK_BASE_URL: optionalPublicUrlSchema
       .optional()
       .default("https://api.deepseek.com"),

@@ -82,7 +82,7 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_PUBLISHABLE_KEY=
 VITE_OWNER_USER_ID=
 VITE_DEEPSEEK_BASE_URL=https://api.deepseek.com
-VITE_DEEPSEEK_MODEL=deepseek-chat
+VITE_DEEPSEEK_MODEL=deepseek-v4-pro
 VITE_NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org
 ```
 

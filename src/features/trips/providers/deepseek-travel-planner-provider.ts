@@ -181,6 +181,7 @@ export class DeepSeekTravelPlannerProvider
               { role: "user", content: userPrompt },
             ],
             response_format: { type: "json_object" },
+            thinking: { type: "disabled" },
             max_tokens: 1800,
             stream: false,
           }),
@@ -202,8 +203,8 @@ export class DeepSeekTravelPlannerProvider
       }
       if (error instanceof TypeError) {
         throw new AppError(
-          "API_CORS_BLOCKED",
-          "浏览器无法直连 DeepSeek，可能被 CORS 或网络策略拦截。",
+          "NETWORK_ERROR",
+          "未能连接 DeepSeek（未收到 HTTP 响应）。请检查网络、代理、浏览器扩展或 API 地址；官方端点当前支持浏览器直连。",
           error,
         );
       }
@@ -215,19 +216,43 @@ export class DeepSeekTravelPlannerProvider
   }
 
   private async readContent(response: Response) {
-    if ([401, 402, 403].includes(response.status)) {
+    if ([400, 404].includes(response.status)) {
+      throw new AppError(
+        "API_CONFIGURATION_ERROR",
+        "DeepSeek 不接受当前模型或请求配置。请使用 deepseek-v4-pro 或 deepseek-v4-flash，并检查 API 地址。",
+      );
+    }
+    if (response.status === 401) {
       throw new AppError(
         "PERMISSION_DENIED",
-        "DeepSeek API Key 无效、余额不足或无权使用当前模型。",
+        "DeepSeek API Key 无效，请检查后重新保存。",
+      );
+    }
+    if (response.status === 402) {
+      throw new AppError(
+        "PERMISSION_DENIED",
+        "DeepSeek 账户余额不足，请充值后重试。",
+      );
+    }
+    if (response.status === 403) {
+      throw new AppError(
+        "PERMISSION_DENIED",
+        "当前 DeepSeek API Key 无权使用所选模型。",
       );
     }
     if (response.status === 429) {
       throw new AppError("RATE_LIMITED", "DeepSeek 请求过于频繁，请稍后重试。");
     }
-    if (!response.ok) {
+    if (response.status >= 500) {
       throw new AppError(
         "NETWORK_ERROR",
         `DeepSeek 服务暂时不可用（HTTP ${response.status}）。`,
+      );
+    }
+    if (!response.ok) {
+      throw new AppError(
+        "NETWORK_ERROR",
+        `DeepSeek 请求未被接受（HTTP ${response.status}）。`,
       );
     }
 

@@ -3,6 +3,7 @@ import {
   DeepSeekTravelPlannerProvider,
   parseGeneratedTravelPlan,
 } from "../../src/features/trips/providers/deepseek-travel-planner-provider";
+import { AppError } from "../../src/lib/errors/app-error";
 
 const validPlan = {
   title: "富士山湖海路线",
@@ -77,13 +78,24 @@ describe("DeepSeekTravelPlannerProvider", () => {
 
     expect(result.points).toHaveLength(2);
     expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0]?.[0]).toBe(
+      "https://api.deepseek.com/chat/completions",
+    );
     const rawBody = request.mock.calls[1]?.[1]?.body;
     expect(typeof rawBody).toBe("string");
     const secondBody = JSON.parse(
       typeof rawBody === "string" ? rawBody : "{}",
-    ) as { messages: Array<{ content: string }> };
+    ) as {
+      messages: Array<{ content: string }>;
+      model: string;
+      thinking: { type: string };
+    };
+    expect(secondBody.model).toBe("deepseek-v4-pro");
+    expect(secondBody.thinking.type).toBe("disabled");
     expect(secondBody.messages[1]?.content).toContain("上一次输出没有通过");
     expect(JSON.stringify(secondBody)).not.toContain("secret-key");
+    const headers = new Headers(request.mock.calls[0]?.[1]?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer secret-key");
   });
 
   it("拒绝空地点数组和非 JSON 内容", () => {
@@ -91,5 +103,48 @@ describe("DeepSeekTravelPlannerProvider", () => {
       parseGeneratedTravelPlan(JSON.stringify({ ...validPlan, points: [] })),
     ).toThrow();
     expect(() => parseGeneratedTravelPlan("不是 JSON")).toThrow();
+  });
+
+  it("网络层 TypeError 不武断归因为 CORS", async () => {
+    const provider = new DeepSeekTravelPlannerProvider({
+      fetch: vi.fn<typeof fetch>().mockRejectedValue(new TypeError("failed")),
+    });
+
+    const caught: unknown = await provider
+      .execute(input, { apiKey: "secret-key" })
+      .catch((error: unknown) => error);
+
+    expect(caught).toBeInstanceOf(AppError);
+    if (!(caught instanceof AppError)) throw caught;
+    expect(caught.code).toBe("NETWORK_ERROR");
+    expect(caught.message).toContain("未收到 HTTP 响应");
+  });
+
+  it.each([
+    [400, "API_CONFIGURATION_ERROR", "模型或请求配置"],
+    [404, "API_CONFIGURATION_ERROR", "模型或请求配置"],
+    [401, "PERMISSION_DENIED", "API Key 无效"],
+    [402, "PERMISSION_DENIED", "余额不足"],
+    [403, "PERMISSION_DENIED", "无权使用"],
+    [429, "RATE_LIMITED", "请求过于频繁"],
+    [500, "NETWORK_ERROR", "服务暂时不可用"],
+  ])("将 HTTP %i 映射为脱敏错误", async (status, code, message) => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("third-party detail", { status }));
+    const provider = new DeepSeekTravelPlannerProvider({
+      fetch: request,
+      wait: () => Promise.resolve(),
+    });
+
+    const caught: unknown = await provider
+      .execute(input, { apiKey: "secret-key" })
+      .catch((error: unknown) => error);
+
+    expect(caught).toBeInstanceOf(AppError);
+    if (!(caught instanceof AppError)) throw caught;
+    expect(caught.code).toBe(code);
+    expect(caught.message).toContain(message);
+    expect(caught.message).not.toContain("third-party detail");
   });
 });

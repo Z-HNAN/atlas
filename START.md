@@ -34,7 +34,7 @@ npm run build
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | 空                                    | 浏览器公开 Publishable Key           |
 | `VITE_OWNER_USER_ID`            | 空                                    | 部署提示预留；RLS 不信任该值         |
 | `VITE_DEEPSEEK_BASE_URL`        | `https://api.deepseek.com`            | 公开 API 基址                        |
-| `VITE_DEEPSEEK_MODEL`           | `deepseek-chat`                       | 当前账号可用模型名                   |
+| `VITE_DEEPSEEK_MODEL`           | `deepseek-v4-pro`                     | 当前账号可用模型名                   |
 | `VITE_NOMINATIM_BASE_URL`       | `https://nominatim.openstreetmap.org` | 地理编码服务                         |
 
 所有 `VITE_` 值都会编译到浏览器资源。禁止填写 Supabase secret/service role、数据库密码、DeepSeek Key 或其它私密凭证。
@@ -71,7 +71,17 @@ VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLIC_KEY
 
 Provider 对外层 Chat Completion 和内层计划分别做 Zod 校验。模型返回 Markdown JSON 代码块时可以解析；首次输出无效会修复重试一次，第二次仍失败则不保存。
 
-浏览器直连可能被供应商 CORS、企业网络或扩展阻止。出现提示时手工功能仍完整可用；不要把项目方共享 Key 写进环境变量。需要代理时另立 OpenSpec。
+DeepSeek 官方端点在 2026-07-30 的核查中允许 localhost、自定义域名和 Vercel 来源携带 `Authorization`、`Content-Type` 发起浏览器跨域 POST，因此个人 BYOK 可以直接从 C 端请求，不需要 Vercel Function。不要把项目方共享 Key 写进环境变量。
+
+如果提示“未收到 HTTP 响应”，浏览器没有获得可读取的 API 响应，无法仅凭 `fetch TypeError` 判定是 CORS。依次检查：
+
+1. 开发者工具 Network 中是否存在 OPTIONS 和 POST；官方 OPTIONS 应返回 200。
+2. `VITE_DEEPSEEK_BASE_URL` 是否为 `https://api.deepseek.com`。
+3. 模型是否为当前支持的 `deepseek-v4-pro` 或 `deepseek-v4-flash`。
+4. 关闭会拦截 API 请求的扩展，或切换代理、DNS 和网络后重试。
+5. HTTP 401 表示 Key 无效，402 表示余额不足，403 表示模型权限不足，429 表示限流。
+
+只有官方未来取消 CORS，或产品需要项目共享额度时，才应单独立项薄代理。
 
 ### 3.2 手工创建
 
