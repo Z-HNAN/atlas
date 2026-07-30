@@ -153,16 +153,17 @@ export class DeepSeekTravelPlannerProvider
 
     const systemPrompt =
       "你是虚拟旅行策划师。为 Microsoft Flight Simulator 目视探索设计景点顺序，但不要提供经纬度、机场、航路或航空导航建议。必须只输出 JSON：title、summary、region、theme、points；每个 point 必须包含 nameZh、nameLocal、country、region、searchQuery、reason、order。order 从 1 连续编号且不重复。searchQuery 要适合 OpenStreetMap Nominatim 地理编码。";
+    const originalRequest = [
+      `旅行想法：${input.prompt}`,
+      `地区：${input.region || "由你判断"}`,
+      `主题：${input.theme || "由你判断"}`,
+      `预计时长：${input.durationMinutes} 分钟`,
+      `地点数量：严格生成 ${input.pointCount} 个`,
+      `偏好：${input.preferences || "无额外偏好"}`,
+    ].join("\n");
     const userPrompt = invalidOutput
-      ? `上一次输出没有通过严格校验。请修复并只返回完整 JSON，不要使用 Markdown。\n上次输出：${invalidOutput}`
-      : [
-          `旅行想法：${input.prompt}`,
-          `地区：${input.region || "由你判断"}`,
-          `主题：${input.theme || "由你判断"}`,
-          `预计时长：${input.durationMinutes} 分钟`,
-          `地点数量：严格生成 ${input.pointCount} 个`,
-          `偏好：${input.preferences || "无额外偏好"}`,
-        ].join("\n");
+      ? `${originalRequest}\n\n上一次输出没有通过严格校验。请在保留上述需求的前提下修复，并只返回完整 JSON，不要使用 Markdown。\n上次输出：${invalidOutput}`
+      : originalRequest;
 
     try {
       return await this.request(

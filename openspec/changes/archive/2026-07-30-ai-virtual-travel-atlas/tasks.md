@@ -10,5 +10,6 @@
 - [x] P0｜负责人：Codex｜依赖：Supabase 基础｜新增旅行表、索引、触发器、owner 函数和 RLS；验收：公开只读、非 owner 写入被拒绝。
 - [x] P1｜负责人：Codex｜依赖：全部功能｜添加富士山演示路线和核心单元/集成测试；验收：AI、Nominatim、DMS、PLN、Schema、本地生命周期均有测试。
 - [x] P1｜负责人：Codex｜依赖：实现稳定｜更新 README、START、环境变量、PWA 元数据和 OpenSpec；验收：全部中文且可指导本地、Supabase、BYOK、PLN 和部署。
+- [x] P1｜负责人：Codex｜依赖：首轮交付审计｜补齐 `/login`、Atlas PWA 图标、分享封面、完整 PLN 快照和 Supabase migration 安全契约测试；验收：生产预览核心路由与静态资源均返回 200，主规范和变更规范与实现一致。
 - [ ] P0｜负责人：部署者｜依赖：Supabase 项目与真实账号｜在生产项目执行迁移、写入 owner UUID、配置 Auth 回调和部署变量；验收：真实 Magic Link、RLS 和跨设备同步通过。
 - [ ] P0｜负责人：产品所有者｜依赖：MSFS 2024 与 Sky4Sim｜完成富士山—河口湖—箱根—东京湾手工端到端验收；验收：Sky4Sim 加载路线且顺序、坐标、网页记录一致。

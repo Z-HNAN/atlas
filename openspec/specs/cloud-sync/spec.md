@@ -90,7 +90,22 @@ SyncManager SHALL 比较 local.dataVersion、dirty、lastRemoteVersion 和 remot
 - **WHEN** 请求没有有效会话或 user_id 不属于当前会话
 - **THEN** RLS 拒绝查询和写入，前端隐藏按钮不作为权限边界
 
+### Requirement: 规范化旅行表与 owner 权限
+
+Supabase SHALL 提供 `trips`、`trip_points`、`geocode_cache` 和 `atlas_owners`；旅行、地点和缓存 SHALL 允许 anon/authenticated 公开读取，写操作 SHALL 只允许数据库注册 owner。
+
+#### Scenario: 公开读取
+
+- **WHEN** 未登录用户查询已经发布的规范化旅行、地点或缓存
+- **THEN** RLS 允许 SELECT，但不授予 anon 任何 INSERT、UPDATE 或 DELETE
+
+#### Scenario: owner 写入
+
+- **WHEN** authenticated 用户尝试写入规范化表
+- **THEN** RLS 通过 `auth.uid()` 与安全定义函数 `is_atlas_owner()` 校验，非 owner 被拒绝，旅行 created_by 必须等于当前用户
+
 ## Compatibility
 
 - 云同步关闭、Supabase 不可用或上传失败时，本地读取和保存不得受影响。
 - 远程 Payload 必须通过同一本地迁移链和 Zod Schema；未来 schemaVersion 不得静默覆盖。
+- 首版规范化表不与 Local-first 快照静默双写；公共发布需要独立 OpenSpec 定义显式发布、事务和失败恢复。

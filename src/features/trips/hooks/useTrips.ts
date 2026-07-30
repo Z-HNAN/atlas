@@ -232,6 +232,8 @@ export const useTrips = () => {
             return {
               ...trip,
               status: "draft",
+              startedAt: null,
+              completedAt: null,
               updatedAt: timestamp,
               points: [...trip.points, created],
             };

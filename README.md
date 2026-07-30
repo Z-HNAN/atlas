@@ -28,6 +28,8 @@ npm run dev
 
 打开 `http://localhost:5173`。不创建 `.env.local` 也能使用纯本地模式；首次启动包含一条富士山到东京湾的可删除示例路线。
 
+可选登录入口为 `/login`；未登录仍可完整使用本地功能。
+
 完整的 Supabase、Auth、RLS、Vercel、BYOK、Sky4Sim 和 OpenSpec 操作见 [START.md](./START.md)。
 
 ## 核心使用流程

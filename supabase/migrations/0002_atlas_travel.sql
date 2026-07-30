@@ -183,8 +183,8 @@ with check (
   public.is_atlas_owner()
   and exists (
     select 1 from public.trips
-    where id = trip_id
-      and created_by = (select auth.uid())
+    where public.trips.id = public.trip_points.trip_id
+      and public.trips.created_by = (select auth.uid())
   )
 );
 
@@ -197,8 +197,8 @@ with check (
   public.is_atlas_owner()
   and exists (
     select 1 from public.trips
-    where id = trip_id
-      and created_by = (select auth.uid())
+    where public.trips.id = public.trip_points.trip_id
+      and public.trips.created_by = (select auth.uid())
   )
 );
 
@@ -232,4 +232,3 @@ create policy "owner delete geocode cache"
 on public.geocode_cache for delete
 to authenticated
 using (public.is_atlas_owner());
-

@@ -1,10 +1,11 @@
 schema: spec-driven
 
 context: |
-  项目：Todo Seed，Personal Web Seed 的 Local-first Todo 参考实现，保留稳定 appId gipsy 以兼容既有数据。
-  技术栈：Vite、React、严格 TypeScript、React Router、Tailwind CSS、Zod、Vitest、PWA。
-  架构：Local-first，Todo 业务数据使用版本化 JSON Envelope 保存到 LocalStorage；Supabase Magic Link 和乐观并发快照同步可选且默认关闭；DeepSeek 任务拆解使用 BYOK Provider。
-  安全：所有持久化和外部数据经 Zod 校验；API Key 不进入 Payload、导出或云端；前端禁止私密凭证。
+  项目：Atlas，AI 驱动的个人虚拟旅行收藏地图，面向 Microsoft Flight Simulator 2024 与 Sky4Sim 目视探索。
+  技术栈：Vite、React、严格 TypeScript、React Router、Tailwind CSS、Zod、Leaflet、React Leaflet、Vitest、PWA。
+  架构：Client-first 与 Local-first；旅行和地理编码缓存使用版本化 LocalAppEnvelope<TripPayload>；Supabase Magic Link 和乐观并发快照同步可选且默认关闭。
+  外部能力：DeepSeek BYOK 生成结构化旅行计划；Nominatim 串行查询真实坐标；Leaflet 展示路线；浏览器本地生成严格 Custom/User PLN。
+  安全：所有持久化和外部数据经 Zod 校验；API Key 不进入 Payload、导出或云端；RLS 限制 owner 写入；前端禁止私密凭证。
   协作：所有产出使用中文；Codex 实现前先维护 OpenSpec，交付前运行 typecheck、lint、test、format:check、build，并维护 START 指南。
 
 rules:

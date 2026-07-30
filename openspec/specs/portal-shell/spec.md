@@ -8,7 +8,7 @@
 
 ### Requirement: 产品路由
 
-应用 SHALL 提供 `/`、`/atlas`、`/trips`、`/trips/new`、`/trips/:id`、`/settings` 和未找到页面，并 SHALL 支持静态部署直达。
+应用 SHALL 提供 `/`、`/login`、`/atlas`、`/trips`、`/trips/new`、`/trips/:id`、`/settings` 和未找到页面，并 SHALL 支持静态部署直达。
 
 #### Scenario: 打开 Atlas
 

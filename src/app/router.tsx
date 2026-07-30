@@ -14,6 +14,7 @@ import type { LocalAppEnvelope } from "../lib/local-data/envelope";
 import type { StorageSizeInfo } from "../lib/local-data/storage-size";
 import Atlas from "../pages/Atlas";
 import Dashboard from "../pages/Dashboard";
+import Login from "../pages/Login";
 import NewTrip from "../pages/NewTrip";
 import NotFound from "../pages/NotFound";
 import Settings from "../pages/Settings";
@@ -47,6 +48,12 @@ const AppRouter = (props: AppRouterProps) => (
       <Route path="/" element={<Dashboard trips={props.trips} />} />
       <Route path="/atlas" element={<Atlas trips={props.trips} />} />
       <Route path="/trips" element={<Trips trips={props.trips} />} />
+      <Route
+        path="/login"
+        element={
+          <Login envelope={props.envelope} cloudSync={props.cloudSync} />
+        }
+      />
       <Route
         path="/trips/new"
         element={

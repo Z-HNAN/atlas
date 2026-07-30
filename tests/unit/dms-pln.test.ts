@@ -74,6 +74,7 @@ describe("DMS 转换", () => {
     expect(coordinateToDms(-33.5, "latitude")).toBe("S33° 30' 0.00\"");
     expect(coordinateToDms(-70.75, "longitude")).toBe("W70° 45' 0.00\"");
     expect(coordinateToDms(0, "latitude")).toBe("N0° 0' 0.00\"");
+    expect(coordinateToDms(0, "longitude")).toBe("E0° 0' 0.00\"");
     expect(coordinateToDms(12.9999999, "latitude")).toBe("N13° 0' 0.00\"");
   });
 
@@ -108,5 +109,41 @@ describe("PLN 生成", () => {
     expect(
       toSafePlnFilename("Fuji & 河口湖", new Date("2026-07-11T00:00:00Z")),
     ).toBe("fuji-2026-07-11.pln");
+  });
+
+  it("完整 XML 保持经过 Sky4Sim 验证的严格快照", () => {
+    expect(generatePln(makeTrip())).toMatchInlineSnapshot(`
+      "<?xml version="1.0" encoding="UTF-8"?>
+      <SimBase.Document Type="AceXML" version="1,0">
+        <Descr>AceXML Document</Descr>
+        <FlightPlan.FlightPlan>
+          <Title>Custom to Custom</Title>
+          <DepartureID>
+          </DepartureID>
+          <DepartureLLA>N35° 21' 38.16",E138° 43' 38.64"</DepartureLLA>
+          <DestinationID>
+          </DestinationID>
+          <DestinationLLA>S33° 30' 0.00",W70° 45' 0.00"</DestinationLLA>
+          <Descr>Custom to Custom</Descr>
+          <DepartureName>Custom</DepartureName>
+          <DestinationName>Custom</DestinationName>
+          <AppVersion>
+            <AppVersionMajor>11</AppVersionMajor>
+            <AppVersionBuild>282174</AppVersionBuild>
+          </AppVersion>
+
+          <ATCWaypoint id="Custom">
+            <ATCWaypointType>User</ATCWaypointType>
+            <WorldPosition>N35° 21' 38.16",E138° 43' 38.64"</WorldPosition>
+            <SpeedMaxFP>-1</SpeedMaxFP>
+          </ATCWaypoint>
+          <ATCWaypoint id="Custom">
+            <ATCWaypointType>User</ATCWaypointType>
+            <WorldPosition>S33° 30' 0.00",W70° 45' 0.00"</WorldPosition>
+            <SpeedMaxFP>-1</SpeedMaxFP>
+          </ATCWaypoint>
+        </FlightPlan.FlightPlan>
+      </SimBase.Document>"
+    `);
   });
 });

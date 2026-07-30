@@ -29,6 +29,13 @@ const Atlas = ({ trips }: { trips: Trip[] }) => {
             String(new Date(trip.createdAt).getFullYear()) === filter.year,
         )
         .filter((trip) => !filter.theme || trip.theme === filter.theme)
+        .filter(
+          (trip) =>
+            filter.view !== "planned" ||
+            trip.status === "draft" ||
+            trip.status === "planned" ||
+            trip.status === "in_progress",
+        )
         .map((trip) => {
           if (filter.view === "all") return trip;
           const points = trip.points.filter((point) =>

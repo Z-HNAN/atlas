@@ -137,8 +137,6 @@ const TripDetail = ({
         save(next, "未找到可靠坐标，请修改搜索词或手工填写。");
         return;
       }
-      if (resolution.status === "resolved")
-        onCacheGeocode(resolution.cacheEntry);
       const next = {
         ...draft,
         status: "draft" as const,
@@ -156,12 +154,15 @@ const TripDetail = ({
         ),
         updatedAt: new Date().toISOString(),
       };
-      save(
+      const saved = save(
         next,
         resolution.status === "ambiguous"
           ? "找到多个相近结果，请检查地图后手工确认。"
           : "地点坐标已解析并保存。",
       );
+      if (saved && resolution.status === "resolved") {
+        onCacheGeocode(resolution.cacheEntry);
+      }
     } catch (caught) {
       setError(toAppError(caught, "地点查询失败。").message);
     } finally {
@@ -172,6 +173,7 @@ const TripDetail = ({
   const handleGeocodeAll = async () => {
     let next = draft;
     let cache = [...geocodeCache];
+    const newCacheEntries: GeocodeCacheEntry[] = [];
     const targets = orderedPoints.filter(
       (point) => point.geocodeStatus !== "resolved",
     );
@@ -195,7 +197,7 @@ const TripDetail = ({
                 (entry) => entry.queryKey !== resolution.cacheEntry.queryKey,
               ),
             ];
-            onCacheGeocode(resolution.cacheEntry);
+            newCacheEntries.push(resolution.cacheEntry);
           }
           next = {
             ...next,
@@ -241,7 +243,10 @@ const TripDetail = ({
         setError(toAppError(caught, `${target.nameZh} 查询失败。`).message);
       }
     }
-    save(next, "批量查询完成，请人工检查歧义或失败地点。");
+    const saved = save(next, "批量查询完成，请人工检查歧义或失败地点。");
+    if (saved) {
+      newCacheEntries.forEach((entry) => onCacheGeocode(entry));
+    }
     setGeocoding("");
   };
 
@@ -484,6 +489,7 @@ const TripDetail = ({
               className="primary-btn"
               type="button"
               onClick={() => {
+                if (!save(draft, "当前修改已保存。")) return;
                 const result = onAddPoint(draft.id);
                 if (!result.ok) setError(result.error);
                 else setMessage("新地点已添加到路线末尾。");

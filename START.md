@@ -216,7 +216,7 @@ RLS 设计：
 
 部署后至少验证：
 
-- `/`、`/atlas`、`/trips`、`/trips/new`、`/settings` 直达；
+- `/`、`/login`、`/atlas`、`/trips`、`/trips/new`、`/settings` 直达；
 - `/manifest.webmanifest`、`/sw.js` 和 `/assets/*` 返回真实文件；
 - 地图 attribution、DeepSeek BYOK、Nominatim、Magic Link 和 PLN 下载。
 
