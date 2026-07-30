@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DeepSeekTravelPlannerProvider,
   parseGeneratedTravelPlan,
@@ -40,6 +40,10 @@ const input = {
   pointCount: 2,
   preferences: "避开大城市",
 };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("DeepSeekTravelPlannerProvider", () => {
   it("解析 Markdown JSON 代码块并经过 Zod 校验", () => {
@@ -103,6 +107,26 @@ describe("DeepSeekTravelPlannerProvider", () => {
       parseGeneratedTravelPlan(JSON.stringify({ ...validPlan, points: [] })),
     ).toThrow();
     expect(() => parseGeneratedTravelPlan("不是 JSON")).toThrow();
+  });
+
+  it("以 globalThis 为接收者调用浏览器原生 fetch", async () => {
+    const request = vi.fn(function (this: unknown) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: JSON.stringify(validPlan) } }],
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", request);
+    const provider = new DeepSeekTravelPlannerProvider();
+
+    await provider.execute(input, { apiKey: "secret-key" });
+
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it("网络层 TypeError 不武断归因为 CORS", async () => {

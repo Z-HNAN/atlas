@@ -26,12 +26,17 @@ Provider SHALL 使用 Chat Completions JSON Output，并 SHALL 校验外层响�
 
 ### Requirement: DeepSeek 浏览器 BYOK 直连
 
-Provider SHALL 使用用户在当前浏览器提供的 Key 直连可配置的 DeepSeek 官方 Chat Completions Base URL；默认模型 SHALL 为当前官方模型 `deepseek-v4-pro`，部署者 MAY 通过公开环境变量覆盖模型名。业务 UI SHALL 只依赖 Provider/Hook，不直接拼接 DeepSeek URL。
+Provider SHALL 使用用户在当前浏览器提供的 Key 直连可配置的 DeepSeek 官方 Chat Completions Base URL；捕获浏览器原生 fetch 时 SHALL 保留其要求的全局调用接收者，不得因把 fetch 保存为类成员而在网络请求前触发 Illegal invocation。默认模型 SHALL 为当前官方模型 `deepseek-v4-pro`，部署者 MAY 通过公开环境变量覆盖模型名。业务 UI SHALL 只依赖 Provider/Hook，不直接拼接 DeepSeek URL。
 
 #### Scenario: 默认配置生成请求
 
 - **WHEN** 部署者未显式配置模型且用户发起 AI 旅行规划
 - **THEN** Provider 请求官方 `/chat/completions`，请求体模型为 `deepseek-v4-pro`，Key 只出现在 Authorization Header
+
+#### Scenario: 使用浏览器原生 fetch
+
+- **WHEN** Provider 未注入测试 Request 且用户发起 AI 旅行规划
+- **THEN** 原生 fetch 以 globalThis 为接收者执行，浏览器实际发送 OPTIONS/POST 并读取 HTTP 响应
 
 #### Scenario: 网络层拒绝
 

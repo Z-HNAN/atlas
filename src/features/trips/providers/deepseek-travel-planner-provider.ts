@@ -76,7 +76,7 @@ export class DeepSeekTravelPlannerProvider
   private readonly wait: (milliseconds: number) => Promise<void>;
 
   constructor(dependencies: ProviderDependencies = {}) {
-    this.request = dependencies.fetch ?? fetch;
+    this.request = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
     this.timeoutMs = dependencies.timeoutMs ?? 30_000;
     this.wait = dependencies.wait ?? wait;
   }

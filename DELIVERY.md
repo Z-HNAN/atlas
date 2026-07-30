@@ -24,7 +24,7 @@
 ```text
 typecheck       通过
 lint            通过（0 warning）
-test            16 个测试文件、52 项测试全部通过
+test            16 个测试文件、53 项测试全部通过
 format:check    通过
 build           通过
 OpenSpec        9 项当前主规范 strict 校验通过
