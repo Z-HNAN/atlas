@@ -260,20 +260,22 @@ RLS 设计：
 
 ## 9. OpenSpec 与 Codex
 
-非平凡变更使用：
+Codex 开始实现前先判断变更等级：
+
+- S 级：文案、样式、明确小 Bug、测试补强等局部改动，直接实现、补回归测试并运行门禁，不创建 OpenSpec。
+- M 级：用户行为、AI Prompt、Provider 请求、筛选或错误恢复等能力调整，创建轻量 `tasks.md` 与规格增量；有方案权衡时再增加 `design.md` 或 `proposal.md`。
+- L 级：Schema、迁移、同步、认证、RLS、安全、外部服务、PLN 兼容或核心架构调整，使用完整 proposal、design、tasks 和规格增量。
+
+M/L 级开发中的文档放在：
+
+```text
+openspec/changes/YYYY-MM-DD-topic/
+```
+
+能力契约变化时同步更新 `openspec/specs/<capability>/spec.md`。实现、测试、任务和 strict 校验全部完成后，再移动到：
 
 ```text
 openspec/changes/archive/YYYY-MM-DD-topic/
-├── proposal.md
-├── design.md
-├── tasks.md
-└── specs/<capability>/spec.md
 ```
 
-同步更新 `openspec/specs/<capability>/spec.md`，再实现和测试。交付必须运行五项质量门禁并核对 README、START、OpenSpec、实现和测试一致。
-
-当前首版变更位于：
-
-```text
-openspec/changes/archive/2026-07-30-ai-virtual-travel-atlas/
-```
+交付必须运行五项质量门禁，并核对 README、START、OpenSpec、实现和测试一致。完整判定标准见仓库根目录 `agents.md`。
