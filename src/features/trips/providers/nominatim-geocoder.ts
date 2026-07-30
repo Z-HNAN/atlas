@@ -92,7 +92,7 @@ export class NominatimGeocoder {
   private readonly now: () => Date;
 
   constructor(dependencies: GeocoderDependencies = {}) {
-    this.request = dependencies.fetch ?? fetch;
+    this.request = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
     this.now = dependencies.now ?? (() => new Date());
   }
 

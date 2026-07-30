@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NominatimGeocoder } from "../../src/features/trips/providers/nominatim-geocoder";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("NominatimGeocoder", () => {
   it("根据国家和地区评分，不无条件选择第一个结果", async () => {
@@ -64,5 +68,35 @@ describe("NominatimGeocoder", () => {
     );
     expect(result.status).toBe("resolved");
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("以 globalThis 为接收者调用浏览器原生 fetch", async () => {
+    const request = vi.fn(function (this: unknown) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              lat: "35.3606",
+              lon: "138.7274",
+              display_name: "富士山, 静冈县, 日本",
+              importance: 0.9,
+              address: { country: "日本", state: "静冈县" },
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", request);
+    const geocoder = new NominatimGeocoder();
+
+    const result = await geocoder.resolve(
+      { searchQuery: "富士山", country: "日本", region: "静冈县" },
+      [],
+    );
+
+    expect(result.status).toBe("resolved");
+    expect(request).toHaveBeenCalledTimes(1);
   });
 });
