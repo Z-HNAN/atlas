@@ -4,6 +4,8 @@
 
 当前仓库已经从 Local-first Todo Seed 派生为可独立运行的 Atlas 虚拟旅行收藏地图。纯本地模式具备完整手工闭环；DeepSeek、Nominatim 和 Supabase 是可选网络增强。
 
+交付形态为标准 Vite 项目：`npm run dev` 可本地开发，`npm run build` 生成纯静态 `dist/`，仓库内 `vercel.json` 已配置单页应用回退，可直接连接 Vercel 自行发布。
+
 ## 已交付能力
 
 - Dashboard、旅行列表、AI/手工创建、旅行详情、世界收藏地图、登录和设置页面。

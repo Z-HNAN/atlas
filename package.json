@@ -11,7 +11,7 @@
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:run": "vitest --run",
-    "build": "vite build && node scripts/build-sites-worker.mjs",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "engines": {
