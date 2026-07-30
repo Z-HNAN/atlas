@@ -2,43 +2,37 @@
 
 ## Purpose
 
-定义 DeepSeek 用户自带 API Key 的存储边界和任务拆解 Provider，保证 AI 增强失败时 Todo 本地核心功能仍可完整使用。
+定义 DeepSeek 用户自带 Key 的安全存储、旅行计划 Provider、结构化响应校验、有限修复和错误归一化，使 AI 增强失败时本地旅行核心功能仍然完整可用，并为未来替换服务端 Provider 保留稳定接口。
 
 ## Requirements
 
 ### Requirement: DeepSeek Key 本地边界
 
-ApiKeyStore SHALL 使用 provider ID `deepseek`，默认保存到 sessionStorage，只有用户明确选择记住时才保存到 LocalStorage。
+ApiKeyStore SHALL 默认写入 sessionStorage，只有用户明确选择记住时才写入 LocalStorage。
 
-#### Scenario: 保存或清除 Key
+#### Scenario: 保存或清除
 
-- **WHEN** 用户保存临时或持久 DeepSeek Key，或者选择清除
-- **THEN** Store 只操作 deepseek 前缀，Key 不进入 TodoPayload、导出、Supabase、URL 或日志
+- **WHEN** 用户保存或清除 DeepSeek Key
+- **THEN** Key 不进入 TripPayload、导出、Supabase、URL、日志或 PWA 缓存
 
-### Requirement: DeepSeek Chat Provider
+### Requirement: 结构化旅行计划
 
-Provider SHALL 使用浏览器请求 DeepSeek `/chat/completions`，负责认证 Header、模型、JSON Output、超时、取消、有限重试、错误归一化和 Zod 响应校验。
+Provider SHALL 使用 Chat Completions JSON Output，并 SHALL 校验外层响应和 GeneratedTravelPlan。
 
-#### Scenario: 成功拆解任务
+#### Scenario: 首次输出非法
 
-- **WHEN** 用户在线、Key 存在、任务合法且响应包含有效 JSON subtasks
-- **THEN** Provider 返回 2～6 条经过裁剪、去重和长度校验的子任务，不自动写入 Todo
-
-#### Scenario: Key、网络或响应错误
-
-- **WHEN** Key 缺失、离线、401/402/403、429、CORS 或网络失败、超时、空内容或响应结构无效
-- **THEN** 系统显示对应 AppError；手工 Todo 操作继续可用
+- **WHEN** 内容不是 JSON、缺字段、地点为空、顺序重复或不连续
+- **THEN** Provider 修复重试一次；第二次失败返回 INVALID_RESPONSE
 
 ### Requirement: Provider 可替换
 
-业务 UI SHALL 只依赖 ExternalApiProvider 和任务拆解 Hook，不得直接拼接 DeepSeek URL 或读取 Key Store 内部键。
+业务 UI SHALL 只依赖 Provider/Hook，不直接拼接 DeepSeek URL。
 
-#### Scenario: CORS 降级
+#### Scenario: 浏览器直连受阻
 
-- **WHEN** 浏览器直连被供应商或网络策略阻止
-- **THEN** Provider 报告 API_CORS_BLOCKED；后续可替换 Server Provider 而不改变 Todo 组件
+- **WHEN** CORS 或网络策略阻止请求
+- **THEN** 系统显示可恢复错误，手工旅行继续可用；未来可新增 Server Provider
 
 ## Compatibility
 
-- 默认模型通过 `VITE_DEEPSEEK_MODEL` 集中配置，不进入 TodoPayload。
-- 其它 Provider 的 Key 不迁移成 DeepSeek Key；用户必须提供自己的 DeepSeek Key。
+- Base URL 和模型名是公开环境配置，不得包含 Key。

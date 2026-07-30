@@ -1,7 +1,7 @@
 {
-  "name": "todo-seed",
+  "name": "atlas-virtual-travel",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,7 @@
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:run": "vitest --run",
-    "build": "vite build",
+    "build": "vite build && node scripts/build-sites-worker.mjs",
     "preview": "vite preview"
   },
   "engines": {
@@ -19,14 +19,17 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
+    "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.22.3",
     "workbox-window": "^7.3.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@eslint/js": "9.18.0",
+    "@types/leaflet": "^1.9.16",
     "@types/node": "^22.10.5",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",

@@ -9,16 +9,16 @@ export default defineConfig({
       registerType: "prompt",
       includeAssets: ["pwa-192.svg", "pwa-512.svg"],
       manifest: {
-        name: "Todo Seed",
-        short_name: "Todo Seed",
-        description: "本地优先的个人待办与 Codex 项目种子",
+        name: "Atlas 虚拟旅行收藏地图",
+        short_name: "Atlas",
+        description: "AI 驱动的个人虚拟旅行收藏地图",
         id: "/",
         lang: "zh-CN",
         start_url: "/",
         scope: "/",
         display: "standalone",
-        background_color: "#f8fafc",
-        theme_color: "#0f172a",
+        background_color: "#f3efe7",
+        theme_color: "#17352f",
         icons: [
           {
             src: "/pwa-192.svg",

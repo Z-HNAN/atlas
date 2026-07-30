@@ -1,8 +1,8 @@
-# Todo Seed / Personal Web Seed Codex 协作指南
+# Atlas 虚拟旅行收藏地图 Codex 协作指南
 
 本项目采用 OpenSpec 驱动并由 Codex 辅助开发。所有规范、设计、提案、任务、代码注释和面向用户的文案必须使用中文表达。
 
-当前默认参考业务是 Local-first Todo List；DeepSeek BYOK 用于把任务拆解为子任务。后续从该种子派生的项目继续以 Codex + OpenSpec 为默认开发方式，Todo 是可运行参考，不是必须保留的业务功能。
+当前业务是 Local-first 的 AI 虚拟旅行收藏地图；DeepSeek BYOK 用于生成结构化旅行计划，Nominatim 用于地理编码，Leaflet 用于路线与收藏地图，PLN 模块用于导出 Sky4Sim 已验证的自定义航点路线。
 
 ## 架构不变量
 
@@ -15,13 +15,13 @@
 - Supabase 是可选增强，默认关闭；浏览器中禁止使用 secret、service role、数据库密码或其它私密凭证。
 - 云端更新必须带 expectedRemoteVersion，禁止用无条件 upsert 静默覆盖；冲突时禁止自动合并或自动上传。
 - 第三方能力必须通过 ExternalApiProvider；Key 默认只进 sessionStorage，用户主动选择后才可持久化，错误和日志不得包含 Key。
-- 不提前引入 Serverless、IndexedDB、复杂状态管理、CRDT 或业务数据库；达到 README 中的升级条件后单独立项。
+- 不提前引入 Serverless、IndexedDB、复杂状态管理或 CRDT；达到 README 中的升级条件后单独立项。
 
 ## 目录边界
 
 - `src/app`：应用装配、Router 和全局 Provider。
 - `src/features/<name>`：业务功能，包含组件、Hook、Schema、Repository 配置和类型。
-- `src/features/todos`：当前 Todo 参考业务及 DeepSeek 任务拆解 Provider；派生项目替换业务时应整体迁移到新的 Feature 边界。
+- `src/features/trips`：旅行 Schema、Repository、Hook、DeepSeek/Nominatim Provider 和 PLN。
 - `src/lib/local-data`：Envelope、Repository、迁移、导入导出和容量计算。
 - `src/lib/api-keys`：BYOK Key Store。
 - `src/lib/sync`：与云厂商无关的同步协议；Supabase 实现只能依赖该协议。

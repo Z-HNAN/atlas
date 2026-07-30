@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { APP_CONFIG } from "../../config/app-config";
-import type { CloudSyncController } from "../../features/todos/hooks/useCloudSync";
-import type { TodoPayload } from "../../features/todos/types/todos";
+import type { CloudSyncController } from "../../features/trips/hooks/useCloudSync";
+import type { TripPayload } from "../../features/trips/types/trips";
 import type { LocalAppEnvelope } from "../../lib/local-data/envelope";
 import { downloadJson } from "../../lib/local-data/download";
 
 interface CloudSyncSettingsProps {
   controller: CloudSyncController;
-  envelope: LocalAppEnvelope<TodoPayload> | null;
+  envelope: LocalAppEnvelope<TripPayload> | null;
 }
 
 const statusText: Record<CloudSyncController["status"], string> = {

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-在不影响 Local-first 核心能力的前提下，为 Gipsy 提供可选登录、跨设备快照同步、云备份、恢复和人工冲突处理。
+在不影响 Local-first 核心能力的前提下，为 Atlas 提供可选登录、跨设备旅行快照同步、云备份、恢复和人工冲突处理。
 
 ## Requirements
 

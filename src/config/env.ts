@@ -21,7 +21,7 @@ const optionalPublicUrlSchema = z
 
 const environmentSchema = z
   .object({
-    VITE_APP_ID: appIdSchema.optional().default("gipsy"),
+    VITE_APP_ID: appIdSchema.optional().default("atlas-travel"),
     VITE_ENABLE_CLOUD_SYNC: z
       .enum(["true", "false"])
       .optional()
@@ -33,7 +33,13 @@ const environmentSchema = z
       .trim()
       .min(1)
       .optional()
-      .default("deepseek-v4-flash"),
+      .default("deepseek-chat"),
+    VITE_DEEPSEEK_BASE_URL: optionalPublicUrlSchema
+      .optional()
+      .default("https://api.deepseek.com"),
+    VITE_NOMINATIM_BASE_URL: optionalPublicUrlSchema
+      .optional()
+      .default("https://nominatim.openstreetmap.org"),
   })
   .passthrough();
 

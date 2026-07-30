@@ -1,37 +1,119 @@
-# Todo Seed
+# Atlas · AI 虚拟旅行收藏地图
 
-Todo Seed 是一套可长期复用的个人 Web 项目种子，也是一个可以直接运行的 Local-first Todo List。它用一项完整但克制的参考业务展示表单、列表、过滤、状态更新、删除、版本迁移、备份恢复、可选云同步和 DeepSeek BYOK，并把 Codex + OpenSpec 固化为后续开发流程。
+Atlas 是一个面向 Microsoft Flight Simulator 2024 的个人虚拟旅行规划与收藏工具。它把一句旅行想法变成可确认的地点路线，导出 Sky4Sim 能读取的 `.pln`，并记录到访、评分和旅行总结。
 
-没有网络、账号、Supabase 或 DeepSeek Key 时，Todo 的新增、完成、筛选、删除、导入导出和 PWA 仍可完整使用。
+它不是航空导航软件，也不是 MSFS 插件。MSFS 是探索方式，Sky4Sim 是飞行过程中的地图工具，Atlas 负责规划、收藏与记录。
 
-## 能力概览
+## 首版能力
 
-- Vite 5、React 18、严格 TypeScript、React Router、Tailwind CSS
-- Zod 校验的版本化 `LocalAppEnvelope<TodoPayload>`
-- Todo 新增、完成/恢复、三种过滤、单条删除、清理已完成
-- schemaVersion 1 应用导航数据到 schemaVersion 2 Todo 的安全迁移
-- JSON 导入导出、覆盖前自动备份、本地容量提示
-- PWA 离线应用壳与用户确认更新
-- 可选 Supabase Magic Link 与乐观并发 JSON 快照同步
-- DeepSeek Chat Completions JSON Output 的 BYOK 任务拆解
-- Vitest、ESLint、Prettier、CI、中文 OpenSpec 与 Codex 协作约束
+- AI 旅行计划：DeepSeek BYOK、结构化 JSON、Zod 校验、一次修复重试
+- 地点坐标：Nominatim 串行查询、1.1 秒间隔、匹配评分、本地缓存、歧义人工确认
+- 旅行管理：草稿、已计划、旅行中、已完成；地点到访与备注；1～10 分和总结
+- 地图：Leaflet + OpenStreetMap、编号 Marker、路线、Popup、FitBounds
+- 世界收藏：按到访、旅行、年份、主题筛选
+- PLN：严格 Custom/User 航点模板、DMS、UTF-8、ASCII 文件名、浏览器本地下载
+- Local-first：无网络、无登录、无 Supabase、无 DeepSeek Key 时手工核心功能完整可用
+- 可选云同步：Supabase Magic Link、乐观并发快照、冲突不自动覆盖
+- PWA、JSON 导入导出、覆盖前自动备份、容量提示
 
-完整启动、云配置、Codex 工作流和派生清单见 [START.md](./START.md)。
+## 快速启动
 
-## 本地运行
-
-要求 Node.js 22：
+要求 Node.js 22。
 
 ```bash
-nvm use
 npm ci
 cp .env.example .env.local
 npm run dev
 ```
 
-访问 `http://localhost:5173`。不创建 `.env.local` 也能以纯本地模式运行。
+打开 `http://localhost:5173`。不创建 `.env.local` 也能使用纯本地模式；首次启动包含一条富士山到东京湾的可删除示例路线。
 
-交付前执行：
+完整的 Supabase、Auth、RLS、Vercel、BYOK、Sky4Sim 和 OpenSpec 操作见 [START.md](./START.md)。
+
+## 核心使用流程
+
+```text
+描述旅行想法
+→ DeepSeek 生成地点与顺序
+→ Nominatim 查询真实坐标
+→ 在地图上人工确认
+→ 确认旅行计划
+→ 导出 MSFS / Sky4Sim PLN
+→ 在 MSFS 中探索
+→ 手工标记到访
+→ 评分与总结
+→ Atlas 点亮世界地图
+```
+
+没有 DeepSeek Key 时，可以从“创建旅行 → 手工创建”建立空白草稿，再逐个添加地点。
+
+## 数据与安全
+
+正式本地数据位于 `app:atlas-travel:data`，结构是 `LocalAppEnvelope<TripPayload>`：
+
+```text
+LocalAppEnvelope
+├── appId / schemaVersion / dataVersion
+├── updatedAt / deviceId
+├── payload
+│   ├── trips[]
+│   └── geocodeCache[]
+└── sync.dirty / lastRemoteVersion / lastSyncedAt
+```
+
+- 页面不直接操作 LocalStorage、sessionStorage 或 Supabase 表。
+- 所有持久化和外部响应先通过 Zod。
+- 每次业务修改递增 dataVersion、更新时间并标记 dirty。
+- API Key 默认只进入 sessionStorage；主动选择后才写入 LocalStorage。
+- API Key、认证 Token 和设备偏好不进入 Payload、导出或云快照。
+- Supabase 默认关闭；浏览器只能使用 Project URL 与 Publishable Key。
+- 禁止在浏览器配置 secret、service role、数据库密码或项目共享 DeepSeek Key。
+
+旧 Todo Seed 数据位于 `app:gipsy:data`。Atlas 使用全新 appId，不读取、不覆盖也不删除旧数据。
+
+## 环境变量
+
+```env
+VITE_APP_ID=atlas-travel
+VITE_ENABLE_CLOUD_SYNC=false
+VITE_SUPABASE_URL=
+VITE_SUPABASE_PUBLISHABLE_KEY=
+VITE_OWNER_USER_ID=
+VITE_DEEPSEEK_BASE_URL=https://api.deepseek.com
+VITE_DEEPSEEK_MODEL=deepseek-chat
+VITE_NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org
+```
+
+`VITE_OWNER_USER_ID` 只用于部署文档和前端提示预留，RLS 不信任它；真正写权限来自数据库 `atlas_owners` 与 `auth.uid()`。
+
+## Supabase
+
+迁移文件：
+
+- `0001_app_sync_snapshots.sql`：Local-first 跨设备快照与乐观并发
+- `0002_atlas_travel.sql`：`trips`、`trip_points`、`geocode_cache`、公开读取和 owner 写入 RLS
+
+执行迁移后，管理员必须在 Supabase SQL Editor 注册 owner：
+
+```sql
+insert into public.atlas_owners (user_id)
+values ('你的 Supabase Auth 用户 UUID');
+```
+
+首版应用的跨设备恢复仍使用版本化快照，避免本地、快照、规范化表三向静默双写。规范化表为公开只读与后续显式发布流程提供安全基础；该取舍记录在 OpenSpec。
+
+## PLN 与 Sky4Sim
+
+只有至少两个地点且全部坐标已确认时才能导出。Atlas 在浏览器生成 `.pln`，不会上传或自动操作用户电脑。
+
+1. 在旅行详情点击“导出 MSFS / Sky4Sim PLN”。
+2. 将下载文件移动到 Sky4Sim 可读取的目录。
+3. 在 Sky4Sim 的 Flight Plan 页面加载文件。
+4. 检查编号、顺序和路线后在 MSFS 中目视探索。
+
+模板只生成 `Custom` / `User` 航点和 `SpeedMaxFP=-1`，不会添加机场、航空航路、巡航高度或 `FPType`。
+
+## 测试与交付
 
 ```bash
 npm run typecheck
@@ -41,119 +123,30 @@ npm run format:check
 npm run build
 ```
 
-## Todo 参考业务
+自动测试覆盖旅行 Schema、DeepSeek 修复、Nominatim 匹配与缓存、Local-first 生命周期、DMS 四半球/边界/进位，以及严格 PLN 模板。
 
-首页可以：
+真实服务仍需人工验收：
 
-- 添加标题和可选备注；
-- 标记完成或恢复进行中；
-- 查看全部、进行中、已完成；
-- 确认后删除单条或清理全部已完成；
-- 配置 DeepSeek Key 后，将一条任务拆成 2～6 个子任务，预览确认后一次加入。
+- 使用真实 DeepSeek Key 验证浏览器直连与账号模型权限；
+- 使用两个 Supabase 账号验证 RLS 和冲突；
+- 用“富士山 → 河口湖 → 箱根 → 东京湾”在 Sky4Sim 加载 PLN。
 
-Todo 是派生项目的工程参考，不是必须保留的产品功能。创建其它个人工具时，应替换 `src/features/todos` 的 Payload、Schema、Repository 配置、Hook、页面和测试，同时保留通用 Local-first 基础设施。
-
-## Local-first 数据
-
-正式数据位于 LocalStorage 的 `app:gipsy:data`：
+## 目录
 
 ```text
-LocalAppEnvelope<TodoPayload>
-├── appId / schemaVersion / dataVersion
-├── updatedAt / deviceId
-├── payload.todos[]
-└── sync.dirty / lastRemoteVersion / lastSyncedAt
+src/app                     应用装配与路由
+src/components/map          Leaflet 地图
+src/components/trips        旅行展示组件
+src/features/trips          Schema、Repository、Hook、Provider、PLN
+src/lib/local-data          Envelope、迁移、备份、导入导出
+src/lib/api-keys            BYOK Key Store
+src/lib/sync                云厂商无关的同步协议
+src/lib/supabase            按需 Supabase 客户端与 Auth
+tests                       单元与集成测试
+openspec                    中文主规范与归档变更
+supabase/migrations         数据库与 RLS
 ```
 
-UI 不直接读写 LocalStorage。`BrowserLocalDataRepository` 统一负责 Zod 校验、版本递增、dirty 标记、Schema 迁移、JSON 导入导出、覆盖前备份和容量计算。API Key、认证 Token 与设备偏好不进入 Payload、云快照或导出文件。
+## 首版范围外
 
-当前 `appId=gipsy` 和存储键保持不变，以便已有用户升级。schemaVersion 从 1 升到 2：旧应用名称会转换为“迁移的应用”待办，旧名称和 URL 保存在备注中，迁移前的原 Envelope 保存在最近备份。更早的 `gipsy-apps` 裸数组也会保留 legacy backup 后迁移。失败时原数据不会被静默删除。
-
-容量策略：
-
-- 小于 2 MB：正常；
-- 2～4 MB：提醒导出；
-- 大于 4 MB：建议立即导出，并评估 IndexedDB。
-
-## DeepSeek BYOK
-
-设置页保存用户自己的 DeepSeek API Key；首页通过 `DeepSeekTaskBreakdownProvider` 调用 `POST https://api.deepseek.com/chat/completions`，使用 JSON Output 返回子任务。
-
-- Provider ID 为 `deepseek`；
-- Key 默认只进入 sessionStorage，主动选择“记住”后才进入 LocalStorage；
-- Key 不进入 TodoPayload、JSON 导出、Supabase、URL、日志或 PWA 缓存；
-- 页面只调用 Feature Hook，不能直接拼接供应商 URL；
-- 超时、取消、429/5xx 有限重试、CORS 与无效响应统一转换为 `AppError`；
-- AI 失败不影响手工 Todo。
-
-默认模型由公开变量 `VITE_DEEPSEEK_MODEL` 配置。当前默认值为 `deepseek-v4-flash`；模型变化时只更新配置和 Provider 测试，不修改业务 Payload。浏览器直连被供应商或网络策略阻止时，应另立 OpenSpec 增加 Server Provider，不能把项目方共享 Key 编译进前端。
-
-## PWA 与离线
-
-生产构建生成 Manifest 和 Service Worker，只预缓存应用壳、图标和构建静态资源。离线时 Todo 本地操作继续可用；Supabase 和 DeepSeek 会显示可恢复错误。新 Service Worker 等待激活时，由用户点击刷新。
-
-```bash
-npm run build
-npm run preview
-```
-
-生产预览至少验证 `/`、`/settings`、`/manifest.webmanifest`、`/sw.js` 和一个 `/assets/*` 文件。
-
-## 可选 Supabase 云同步
-
-云同步默认关闭，关闭时不会建立 Supabase 连接。开启后支持邮箱 Magic Link、手动同步、可选 3 秒防抖自动同步、云端恢复、本地覆盖云端、删除云快照和冲突处理。
-
-数据库迁移位于 `supabase/migrations/0001_app_sync_snapshots.sql`。共享表以 `(user_id, app_id)` 为主键，RLS 仅允许 authenticated 用户操作自己的行。更新必须带 `expectedRemoteVersion`；两端同时修改时禁止自动合并或覆盖。
-
-浏览器只能配置公开 URL 与 Publishable Key（旧项目可用 anon key），禁止使用 secret、service role 或数据库密码。
-
-## 环境变量
-
-```env
-VITE_APP_ID=gipsy
-VITE_ENABLE_CLOUD_SYNC=false
-VITE_SUPABASE_URL=
-VITE_SUPABASE_PUBLISHABLE_KEY=
-VITE_DEEPSEEK_MODEL=deepseek-v4-flash
-```
-
-所有 `VITE_` 变量都会编译进浏览器资源，不能放任何私密凭证。DeepSeek API Key 必须由用户在运行时输入。
-
-## 目录结构
-
-```text
-src/app                 应用装配和路由
-src/features/todos      Todo 业务、Schema、Repository 配置、Hook、DeepSeek Provider
-src/components          通用反馈与设置 UI
-src/lib/local-data      Envelope、Repository、迁移、备份和容量
-src/lib/api-keys        BYOK Key Store
-src/lib/sync            SyncManager、同步协议、偏好与 Supabase Provider
-src/lib/supabase        按需加载的客户端与认证网关
-src/lib/providers       第三方 API Provider 协议
-src/lib/errors          统一错误模型
-tests                   单元与集成测试
-openspec                中文主规范和归档变更
-supabase                可选云同步 SQL 与说明
-```
-
-## Codex 辅助开发
-
-后续种子和派生项目默认采用 Codex + OpenSpec：
-
-1. 让 Codex 先读取 `AGENTS.md`、`START.md`、相关主规范、测试和工作区差异。
-2. 非平凡变更先创建中文 proposal、design、tasks 和 capability spec。
-3. 同步更新 `openspec/specs` 主规范，再沿现有 Feature 边界实现。
-4. 迁移、导入、清空和云端覆盖必须保留恢复路径。
-5. 交付前运行全部质量门禁和真实浏览器回归，并报告未使用真实凭证验证的部分。
-
-## 从种子派生
-
-至少替换：
-
-- 全局唯一的 `VITE_APP_ID`、storageKey 和应用品牌；
-- Payload TypeScript 类型、严格 Zod Schema、schemaVersion 和迁移链；
-- `src/features/todos` 参考业务及其测试；
-- PWA 名称、描述、图标；
-- README、START、AGENTS 上下文和 OpenSpec。
-
-不要复制 `gipsy` 的 appId 到新项目。数据接近数 MB、需要索引/Blob 时评估 IndexedDB；需要服务端统计、多人协作、密钥保密、CORS 代理、支付或 Webhook 时，分别创建新的 OpenSpec 再升级架构。
+不包含 MSFS 插件、SimConnect、实时定位、自动到访、航空导航、Sky4Sim API、图片视频、社区分享、多用户协作、三维地图、语音、付费 GIS、自建后端或强制 AI 代理。

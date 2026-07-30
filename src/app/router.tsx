@@ -1,77 +1,90 @@
 import { Route, Routes } from "react-router-dom";
-import type { CloudSyncController } from "../features/todos/hooks/useCloudSync";
-import type { TodoOperationResult } from "../features/todos/hooks/useTodos";
+import AppLayout from "../components/layout/AppLayout";
+import type { CloudSyncController } from "../features/trips/hooks/useCloudSync";
+import type { TripOperationResult } from "../features/trips/hooks/useTrips";
 import type {
-  TodoDraft,
-  TodoItem,
-  TodoPayload,
-} from "../features/todos/types/todos";
+  GeneratedTravelPlan,
+  GeocodeCacheEntry,
+  TravelPoint,
+  Trip,
+  TripDraft,
+  TripPayload,
+} from "../features/trips/types/trips";
 import type { LocalAppEnvelope } from "../lib/local-data/envelope";
 import type { StorageSizeInfo } from "../lib/local-data/storage-size";
-import Home from "../pages/Home";
+import Atlas from "../pages/Atlas";
+import Dashboard from "../pages/Dashboard";
+import NewTrip from "../pages/NewTrip";
 import NotFound from "../pages/NotFound";
 import Settings from "../pages/Settings";
+import TripDetail from "../pages/TripDetail";
+import Trips from "../pages/Trips";
 
 interface AppRouterProps {
-  todos: TodoItem[];
-  envelope: LocalAppEnvelope<TodoPayload> | null;
+  trips: Trip[];
+  geocodeCache: GeocodeCacheEntry[];
+  envelope: LocalAppEnvelope<TripPayload> | null;
   storageSize: StorageSizeInfo;
   cloudSync: CloudSyncController;
-  onAddTodo: (draft: TodoDraft) => TodoOperationResult;
-  onAddSuggestedTodos: (titles: string[]) => TodoOperationResult;
-  onToggleTodo: (id: string) => TodoOperationResult;
-  onRemoveTodo: (id: string) => TodoOperationResult;
-  onClearCompleted: () => TodoOperationResult;
-  onExportData: () => TodoOperationResult<string>;
-  onExportLatestBackup: () => TodoOperationResult<string>;
-  onImportData: (raw: string) => TodoOperationResult;
-  onResetData: () => TodoOperationResult;
+  onAddTrip: (draft: TripDraft) => TripOperationResult<Trip>;
+  onAddGeneratedTrip: (plan: GeneratedTravelPlan) => TripOperationResult<Trip>;
+  onReplaceTrip: (trip: Trip) => TripOperationResult<Trip>;
+  onRemoveTrip: (id: string) => TripOperationResult;
+  onAddPoint: (
+    tripId: string,
+    nameZh?: string,
+  ) => TripOperationResult<TravelPoint>;
+  onCacheGeocode: (entry: GeocodeCacheEntry) => TripOperationResult;
+  onExportData: () => TripOperationResult<string>;
+  onExportLatestBackup: () => TripOperationResult<string>;
+  onImportData: (raw: string) => TripOperationResult;
+  onResetData: () => TripOperationResult;
 }
 
-const AppRouter = ({
-  todos,
-  envelope,
-  storageSize,
-  cloudSync,
-  onAddTodo,
-  onAddSuggestedTodos,
-  onToggleTodo,
-  onRemoveTodo,
-  onClearCompleted,
-  onExportData,
-  onExportLatestBackup,
-  onImportData,
-  onResetData,
-}: AppRouterProps) => (
+const AppRouter = (props: AppRouterProps) => (
   <Routes>
-    <Route
-      path="/"
-      element={
-        <Home
-          todos={todos}
-          onAddTodo={onAddTodo}
-          onAddSuggestedTodos={onAddSuggestedTodos}
-          onToggleTodo={onToggleTodo}
-          onRemoveTodo={onRemoveTodo}
-          onClearCompleted={onClearCompleted}
-        />
-      }
-    />
-    <Route
-      path="/settings"
-      element={
-        <Settings
-          envelope={envelope}
-          storageSize={storageSize}
-          cloudSync={cloudSync}
-          onExportData={onExportData}
-          onExportLatestBackup={onExportLatestBackup}
-          onImportData={onImportData}
-          onResetData={onResetData}
-        />
-      }
-    />
-    <Route path="*" element={<NotFound />} />
+    <Route element={<AppLayout />}>
+      <Route path="/" element={<Dashboard trips={props.trips} />} />
+      <Route path="/atlas" element={<Atlas trips={props.trips} />} />
+      <Route path="/trips" element={<Trips trips={props.trips} />} />
+      <Route
+        path="/trips/new"
+        element={
+          <NewTrip
+            onAddTrip={props.onAddTrip}
+            onAddGeneratedTrip={props.onAddGeneratedTrip}
+          />
+        }
+      />
+      <Route
+        path="/trips/:id"
+        element={
+          <TripDetail
+            trips={props.trips}
+            geocodeCache={props.geocodeCache}
+            onReplaceTrip={props.onReplaceTrip}
+            onRemoveTrip={props.onRemoveTrip}
+            onAddPoint={props.onAddPoint}
+            onCacheGeocode={props.onCacheGeocode}
+          />
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <Settings
+            envelope={props.envelope}
+            storageSize={props.storageSize}
+            cloudSync={props.cloudSync}
+            onExportData={props.onExportData}
+            onExportLatestBackup={props.onExportLatestBackup}
+            onImportData={props.onImportData}
+            onResetData={props.onResetData}
+          />
+        }
+      />
+      <Route path="*" element={<NotFound />} />
+    </Route>
   </Routes>
 );
 

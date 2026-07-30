@@ -13,11 +13,11 @@
 #### Scenario: 新开发者启动
 
 - **WHEN** 开发者首次克隆仓库
-- **THEN** START 说明 Node 22、安装、环境变量、Todo 使用、开发命令、本地模式和质量门禁
+- **THEN** START 说明 Node 22、安装、环境变量、Atlas 使用、开发命令、本地模式和质量门禁
 
 #### Scenario: 配置外部增强
 
-- **WHEN** 开发者需要云同步或 DeepSeek 任务拆解
+- **WHEN** 开发者需要云同步或 DeepSeek 旅行规划
 - **THEN** START 说明 Supabase migration、RLS、Auth URL、公开变量、Magic Link、DeepSeek Key 保存与安全禁区
 
 ### Requirement: OpenSpec 与 Codex 开发流程
@@ -36,7 +36,7 @@
 
 ### Requirement: 派生个人项目
 
-START SHALL 列出从种子派生项目必须替换和验证的配置，并 SHALL 将 Todo 作为可运行参考而非强制业务模板。
+START SHALL 记录从 Local-first 种子派生 Atlas 时替换和验证的配置，并 SHALL 将 Atlas 作为当前可运行产品。
 
 #### Scenario: 创建派生项目
 

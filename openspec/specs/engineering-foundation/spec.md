@@ -2,7 +2,7 @@
 
 ## Purpose
 
-固定 Personal Web Seed 的前端工具链、PWA、部署、持续集成和 Codex 协作约束，使 Gipsy 及其派生项目在每个阶段都可运行、可测试、可部署。
+固定 Atlas 的前端工具链、PWA、部署、持续集成和 Codex 协作约束，使项目在每个阶段都可运行、可测试、可部署。
 
 ## Requirements
 
@@ -13,7 +13,7 @@
 #### Scenario: 本地质量门禁
 
 - **WHEN** 开发者准备交付变更
-- **THEN** `npm run typecheck`、`npm run lint`、`npm run test -- --run` 和 `npm run build` 全部成功
+- **THEN** `npm run typecheck`、`npm run lint`、`npm run test -- --run`、`npm run format:check` 和 `npm run build` 全部成功
 
 #### Scenario: 未配置环境变量
 
