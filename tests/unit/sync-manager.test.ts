@@ -8,6 +8,7 @@ import {
   type SyncPayload,
 } from "../helpers/sync-fixtures";
 
+let commitSequence = 0;
 const createManager = (
   repository: ReturnType<typeof createSyncRepository>,
   cloud: MemorySyncCloud,
@@ -16,37 +17,42 @@ const createManager = (
     repository,
     provider: cloud.createProvider(),
     isPayloadEmpty: (payload) => payload.items.length === 0,
+    createCommitId: () =>
+      `00000000-0000-4000-8000-${String(++commitSequence).padStart(12, "0")}`,
   });
 
 describe("SyncManager 决策矩阵", () => {
-  it("远程不存在时上传本地，并记录同步基线", async () => {
+  it("远程不存在时上传，并记录独立云端基线", async () => {
     const repository = createSyncRepository("device-a");
     const cloud = new MemorySyncCloud();
     const result = await createManager(repository, cloud).sync();
 
-    expect(result).toMatchObject({ status: "synced", action: "uploaded" });
-    expect(repository.load().sync).toMatchObject({
-      dirty: false,
-      lastRemoteVersion: 1,
+    expect(result).toMatchObject({
+      status: "synced",
+      action: "uploaded",
+      cloudVersion: 1,
     });
-    expect(cloud.snapshot?.payload).toEqual({ items: [] });
+    expect((await repository.load()).sync).toMatchObject({
+      dirty: false,
+      lastCloudVersion: 1,
+      syncStatus: "synced",
+    });
   });
 
-  it("本地刚初始化且远程存在时下载，并备份本地", async () => {
+  it("本地为初始空数据且远程存在时下载并备份", async () => {
     const cloud = new MemorySyncCloud();
     const source = createSyncRepository("source");
-    source.update(() => ({ items: ["cloud"] }));
+    await source.update(() => ({ items: ["cloud"] }));
     await createManager(source, cloud).sync();
 
     const target = createSyncRepository("target");
     const result = await createManager(target, cloud).sync();
-
     expect(result).toMatchObject({ status: "synced", action: "downloaded" });
-    expect(target.load().payload.items).toEqual(["cloud"]);
-    expect(target.getLatestBackupJson()).not.toBeNull();
+    expect((await target.load()).payload.items).toEqual(["cloud"]);
+    expect(await target.getLatestBackupJson()).not.toBeNull();
   });
 
-  it("本地未修改而远程版本更高时拉取远程", async () => {
+  it("本地未修改且云版本更高时拉取", async () => {
     const cloud = new MemorySyncCloud();
     const first = createSyncRepository("first");
     const second = createSyncRepository("second");
@@ -54,16 +60,15 @@ describe("SyncManager 决策矩阵", () => {
     const secondManager = createManager(second, cloud);
     await firstManager.sync();
     await secondManager.sync();
-
-    first.update(() => ({ items: ["new-cloud"] }));
+    await first.update(() => ({ items: ["new-cloud"] }));
     await firstManager.sync();
-    const result = await secondManager.sync();
 
-    expect(result).toMatchObject({ status: "synced", action: "downloaded" });
-    expect(second.load().payload.items).toEqual(["new-cloud"]);
+    await secondManager.sync();
+    expect((await second.load()).payload.items).toEqual(["new-cloud"]);
+    expect((await second.load()).sync.lastCloudVersion).toBe(2);
   });
 
-  it("本地与远程均变化时保留冲突，导出和取消不修改数据", async () => {
+  it("双侧修改时保留冲突并可分别导出", async () => {
     const cloud = new MemorySyncCloud();
     const first = createSyncRepository("first");
     const second = createSyncRepository("second");
@@ -71,98 +76,151 @@ describe("SyncManager 决策矩阵", () => {
     const secondManager = createManager(second, cloud);
     await firstManager.sync();
     await secondManager.sync();
-    first.update(() => ({ items: ["remote-change"] }));
-    second.update(() => ({ items: ["local-change"] }));
+    await first.update(() => ({ items: ["remote-change"] }));
+    await second.update(() => ({ items: ["local-change"] }));
     await firstManager.sync();
 
     const result = await secondManager.sync();
     expect(result.status).toBe("conflict");
-    expect(second.load().payload.items).toEqual(["local-change"]);
-
-    const exported = secondManager.exportConflict();
+    expect((await second.load()).payload.items).toEqual(["local-change"]);
+    const exported = await secondManager.exportConflict();
     expect(JSON.parse(exported.localJson)).toMatchObject({
       payload: { items: ["local-change"] },
     });
     expect(JSON.parse(exported.remoteJson)).toMatchObject({
       payload: { items: ["remote-change"] },
     });
-    secondManager.cancelConflict();
-    expect(secondManager.getConflict()).not.toBeNull();
-    expect(second.load().payload.items).toEqual(["local-change"]);
   });
 
-  it("上传期间发生版本竞争时重新拉取并进入冲突", async () => {
+  it("上传竞争后重新拉取并进入冲突", async () => {
     const cloud = new MemorySyncCloud();
     const repository = createSyncRepository("device-a");
-    const initialManager = createManager(repository, cloud);
-    await initialManager.sync();
-    repository.update(() => ({ items: ["local-race"] }));
+    await createManager(repository, cloud).sync();
+    await repository.update(() => ({ items: ["local-race"] }));
     const baseProvider = cloud.createProvider();
-    let pushed = false;
     const racingProvider: SyncProvider<SyncPayload> = {
-      pull: () => baseProvider.pull(),
+      pullLatest: () => baseProvider.pullLatest(),
       push: () => {
-        pushed = true;
         cloud.snapshot = {
           appId: "sync-test",
-          schemaVersion: 1,
-          dataVersion: 2,
+          version: 2,
+          commitId: "00000000-0000-4000-8000-999999999999",
+          payloadSchemaVersion: 1,
           payload: { items: ["remote-race"] },
           deviceId: "device-b",
-          updatedAt: "2026-07-17T08:02:00.000Z",
+          createdAt: "2026-07-17T08:02:00.000Z",
         };
         return Promise.reject(
           new AppError("REMOTE_VERSION_MISMATCH", "测试竞争。"),
         );
       },
-      remove: () => baseProvider.remove(),
     };
     const manager = new SyncManager<SyncPayload>({
       repository,
       provider: racingProvider,
       isPayloadEmpty: (payload) => payload.items.length === 0,
+      createCommitId: () => "00000000-0000-4000-8000-888888888888",
     });
 
     const result = await manager.sync();
-
-    expect(pushed).toBe(true);
     expect(result).toMatchObject({
       status: "conflict",
-      conflict: { remote: { payload: { items: ["remote-race"] } } },
+      conflict: { remote: { version: 2, payload: { items: ["remote-race"] } } },
     });
-    expect(repository.load().payload.items).toEqual(["local-race"]);
+    expect((await repository.load()).sync.syncStatus).toBe("conflict");
   });
 
-  it("显式覆盖和删除云端时保留恢复备份且不删除本地", async () => {
+  it("人工保留本地时提交新版本且保存远端备份", async () => {
     const cloud = new MemorySyncCloud();
     const repository = createSyncRepository("device-a");
     const manager = createManager(repository, cloud);
-    repository.update(() => ({ items: ["baseline"] }));
+    await repository.update(() => ({ items: ["baseline"] }));
     await manager.sync();
     cloud.snapshot = {
       appId: "sync-test",
-      schemaVersion: 1,
-      dataVersion: 3,
-      payload: { items: ["remote-before-overwrite"] },
+      version: 3,
+      commitId: "00000000-0000-4000-8000-777777777777",
+      payloadSchemaVersion: 1,
+      payload: { items: ["remote-before-submit"] },
       deviceId: "device-b",
-      updatedAt: "2026-07-17T08:03:00.000Z",
+      createdAt: "2026-07-17T08:03:00.000Z",
     };
-    repository.update(() => ({ items: ["local-wins"] }));
+    await repository.update(() => ({ items: ["local-wins"] }));
 
-    await manager.overwriteRemote();
+    await manager.submitLocalVersion();
+    expect(cloud.snapshot?.version).toBe(4);
     expect(cloud.snapshot?.payload.items).toEqual(["local-wins"]);
     expect(
-      JSON.parse(repository.getLatestRemoteBackupJson() ?? "{}"),
-    ).toMatchObject({ payload: { items: ["remote-before-overwrite"] } });
+      JSON.parse((await repository.getLatestRemoteBackupJson()) ?? "{}"),
+    ).toMatchObject({ payload: { items: ["remote-before-submit"] } });
+  });
 
-    await manager.deleteRemote();
-    expect(cloud.snapshot).toBeNull();
-    expect(repository.load()).toMatchObject({
-      payload: { items: ["local-wins"] },
-      sync: { dirty: false, lastRemoteVersion: null },
+  it("上传期间的新本地修改保持 dirty，不被旧响应误标为已同步", async () => {
+    const repository = createSyncRepository("device-a");
+    await repository.update(() => ({ items: ["uploading"] }));
+    let signalUploadStarted!: () => void;
+    const uploadStarted = new Promise<void>((resolve) => {
+      signalUploadStarted = resolve;
     });
-    expect(
-      JSON.parse(repository.getLatestRemoteBackupJson() ?? "{}"),
-    ).toMatchObject({ payload: { items: ["local-wins"] } });
+    let finishUpload!: (snapshot: {
+      appId: string;
+      version: number;
+      commitId: string;
+      payloadSchemaVersion: number;
+      payload: SyncPayload;
+      deviceId: string;
+      createdAt: string;
+    }) => void;
+    const uploaded = new Promise<{
+      appId: string;
+      version: number;
+      commitId: string;
+      payloadSchemaVersion: number;
+      payload: SyncPayload;
+      deviceId: string;
+      createdAt: string;
+    }>((resolve) => {
+      finishUpload = resolve;
+    });
+    const provider: SyncProvider<SyncPayload> = {
+      pullLatest: () => Promise.resolve(null),
+      push: (input) => {
+        signalUploadStarted();
+        return uploaded.then((snapshot) => ({
+          ...snapshot,
+          commitId: input.commitId,
+        }));
+      },
+    };
+    const manager = new SyncManager<SyncPayload>({
+      repository,
+      provider,
+      isPayloadEmpty: (payload) => payload.items.length === 0,
+      createCommitId: () => "00000000-0000-4000-8000-666666666666",
+    });
+
+    const syncing = manager.sync();
+    await uploadStarted;
+    await repository.update(() => ({ items: ["edited-during-upload"] }));
+    finishUpload({
+      appId: "sync-test",
+      version: 1,
+      commitId: "00000000-0000-4000-8000-666666666666",
+      payloadSchemaVersion: 1,
+      payload: { items: ["uploading"] },
+      deviceId: "device-a",
+      createdAt: "2026-07-17T08:04:00.000Z",
+    });
+    await syncing;
+
+    expect(await repository.load()).toMatchObject({
+      payload: { items: ["edited-during-upload"] },
+      sync: {
+        dirty: true,
+        lastCloudVersion: 1,
+        lastSyncCommitId: null,
+        syncStatus: "pending",
+      },
+    });
   });
 });

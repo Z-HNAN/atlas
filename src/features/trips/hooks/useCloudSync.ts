@@ -1,26 +1,17 @@
-import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_CONFIG } from "../../../config/app-config";
-import { isSupabaseConfigured } from "../../../config/env";
+import { isCloudSyncConfigured } from "../../../config/env";
 import { toAppError } from "../../../lib/errors/app-error";
 import type { LocalDataRepository } from "../../../lib/local-data/local-data-repository";
-import {
-  SupabaseCloudAuthGateway,
-  type CloudAuthGateway,
-} from "../../../lib/supabase/auth";
-import { getSupabaseClient } from "../../../lib/supabase/client";
 import { shouldAutoSync } from "../../../lib/sync/auto-sync";
 import { BrowserSyncPreferencesStore } from "../../../lib/sync/sync-preferences";
 import { SyncManager } from "../../../lib/sync/sync-manager";
-import {
-  SupabaseSnapshotGateway,
-  SupabaseSyncProvider,
-} from "../../../lib/sync/supabase-sync-provider";
 import type {
   ConflictExports,
   SyncConflict,
   SyncResult,
 } from "../../../lib/sync/types";
+import { WorkerSyncProvider } from "../../../lib/sync/worker-sync-provider";
 import type { TripPayload } from "../types/trips";
 
 export type CloudSyncStatus =
@@ -39,13 +30,13 @@ interface UseCloudSyncOptions {
   repository: LocalDataRepository<TripPayload>;
   localDataVersion: number | null;
   localDirty: boolean;
-  onLocalChange: () => void;
+  onLocalChange: () => void | Promise<void>;
 }
 
 const initialStatus = (): CloudSyncStatus => {
   if (!APP_CONFIG.cloudSyncEnabled) return "disabled";
-  if (!isSupabaseConfigured) return "config-required";
-  return "signed-out";
+  if (!isCloudSyncConfigured) return "config-required";
+  return "checking";
 };
 
 export const useCloudSync = ({
@@ -56,13 +47,13 @@ export const useCloudSync = ({
 }: UseCloudSyncOptions) => {
   const preferencesRef = useRef<BrowserSyncPreferencesStore | null>(null);
   preferencesRef.current ??= new BrowserSyncPreferencesStore(APP_CONFIG.appId);
+  const providerRef = useRef<WorkerSyncProvider<TripPayload> | null>(null);
   const managerRef = useRef<SyncManager<TripPayload> | null>(null);
-  const authGatewayRef = useRef<CloudAuthGateway | null>(null);
   const operationRef = useRef<Promise<SyncResult<TripPayload> | null> | null>(
     null,
   );
-  const sessionUserIdRef = useRef<string | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
   const [status, setStatus] = useState<CloudSyncStatus>(initialStatus);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -76,18 +67,26 @@ export const useCloudSync = ({
       return false;
     }
   });
-  const sessionUserId = session?.user.id ?? null;
 
-  const getAuthGateway = useCallback(async () => {
-    if (authGatewayRef.current) return authGatewayRef.current;
-    const client = await getSupabaseClient();
-    const gateway = SupabaseCloudAuthGateway.fromClient(client);
-    authGatewayRef.current = gateway;
-    return gateway;
+  const getProvider = useCallback(() => {
+    providerRef.current ??= new WorkerSyncProvider<TripPayload>({
+      appId: APP_CONFIG.appId,
+      apiBaseUrl: APP_CONFIG.syncApiBaseUrl,
+    });
+    return providerRef.current;
   }, []);
 
+  const getManager = useCallback(() => {
+    managerRef.current ??= new SyncManager({
+      repository,
+      provider: getProvider(),
+      isPayloadEmpty: (payload: TripPayload) => payload.trips.length === 0,
+    });
+    return managerRef.current;
+  }, [getProvider, repository]);
+
   const applyResult = useCallback(
-    (result: SyncResult<TripPayload>, successMessage: string) => {
+    async (result: SyncResult<TripPayload>, successMessage: string) => {
       if (result.status === "conflict") {
         setConflict(result.conflict);
         setStatus("conflict");
@@ -98,7 +97,7 @@ export const useCloudSync = ({
         setStatus("synced");
         setMessage(successMessage);
         setError("");
-        onLocalChange();
+        await onLocalChange();
       }
       return result;
     },
@@ -114,8 +113,11 @@ export const useCloudSync = ({
       successMessage: string,
     ) => {
       if (operationRef.current) return operationRef.current;
-      const manager = managerRef.current;
-      if (!manager) return null;
+      if (!authenticated) {
+        setStatus("signed-out");
+        setError("请先完成 Cloudflare Access 登录。");
+        return null;
+      }
       if (!navigator.onLine) {
         setStatus("offline");
         setError("当前离线，本地编辑仍可继续；联网后再同步。");
@@ -126,10 +128,15 @@ export const useCloudSync = ({
         setMessage("");
         setError("");
         try {
-          return applyResult(await action(manager), successMessage);
+          return await applyResult(await action(getManager()), successMessage);
         } catch (caught) {
           const appError = toAppError(caught, "云同步失败，请稍后重试。");
-          setStatus(appError.code === "OFFLINE" ? "offline" : "error");
+          if (appError.code === "AUTH_REQUIRED") {
+            setAuthenticated(false);
+            setStatus("signed-out");
+          } else {
+            setStatus(appError.code === "OFFLINE" ? "offline" : "error");
+          }
           setError(appError.message);
           return null;
         }
@@ -141,80 +148,47 @@ export const useCloudSync = ({
         if (operationRef.current === operation) operationRef.current = null;
       }
     },
-    [applyResult],
+    [applyResult, authenticated, getManager],
   );
 
-  useEffect(() => {
-    if (!APP_CONFIG.cloudSyncEnabled || !isSupabaseConfigured) return;
-    let active = true;
-    let unsubscribe: (() => void) | undefined;
-    void getAuthGateway()
-      .then(async (auth) => {
-        const initialSession = await auth.getSession();
-        if (!active) return;
-        sessionUserIdRef.current = initialSession?.user.id ?? null;
-        setSession(initialSession);
-        setStatus(initialSession ? "idle" : "signed-out");
-        unsubscribe = auth.subscribe((next) => {
-          if (!active) return;
-          const nextUserId = next?.user.id ?? null;
-          const userChanged = sessionUserIdRef.current !== nextUserId;
-          sessionUserIdRef.current = nextUserId;
-          setSession(next);
-          if (userChanged) {
-            setStatus(next ? "idle" : "signed-out");
-            setConflict(null);
-            setError("");
-            setMessage("");
-          }
-        });
-      })
-      .catch((caught) => {
-        if (!active) return;
+  const checkSession = useCallback(async () => {
+    if (!APP_CONFIG.cloudSyncEnabled || !isCloudSyncConfigured) return false;
+    setStatus("checking");
+    setError("");
+    try {
+      const current = await getProvider().getCurrentUser();
+      const membership = current.apps.some(
+        (membershipItem) => membershipItem.id === APP_CONFIG.appId,
+      );
+      if (!membership) {
+        setAuthenticated(false);
         setStatus("error");
-        setError(toAppError(caught, "Supabase 初始化失败。").message);
-      });
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
-  }, [getAuthGateway]);
+        setError("当前 Access 账号没有 Atlas 的访问权限。");
+        return false;
+      }
+      setAuthenticated(true);
+      setUserEmail(current.user.email);
+      setStatus("idle");
+      setMessage("Cloudflare Access 身份已确认。");
+      return true;
+    } catch (caught) {
+      const appError = toAppError(caught, "Access 会话检查失败。");
+      setAuthenticated(false);
+      setStatus(
+        appError.code === "AUTH_REQUIRED" ? "signed-out" : "signed-out",
+      );
+      setError(
+        appError.code === "AUTH_REQUIRED"
+          ? "尚未登录 Cloudflare Access。"
+          : appError.message,
+      );
+      return false;
+    }
+  }, [getProvider]);
 
   useEffect(() => {
-    if (!sessionUserId) {
-      managerRef.current = null;
-      return;
-    }
-    let active = true;
-    void getSupabaseClient()
-      .then((client) => {
-        if (!active) return;
-        const provider = new SupabaseSyncProvider<TripPayload>({
-          userId: sessionUserId,
-          appId: APP_CONFIG.appId,
-          gateway: new SupabaseSnapshotGateway(client),
-        });
-        managerRef.current = new SyncManager({
-          repository,
-          provider,
-          isPayloadEmpty: (payload) => payload.trips.length === 0,
-        });
-        void execute(
-          (manager) => manager.sync(),
-          "checking",
-          "云端版本检查完成。",
-        );
-      })
-      .catch((caught) => {
-        if (!active) return;
-        setStatus("error");
-        setError(toAppError(caught, "同步模块初始化失败。").message);
-      });
-    return () => {
-      active = false;
-      managerRef.current = null;
-    };
-  }, [execute, repository, sessionUserId]);
+    void checkSession();
+  }, [checkSession]);
 
   const syncNow = useCallback(
     () => execute((manager) => manager.sync(), "syncing", "本地与云端已同步。"),
@@ -225,7 +199,7 @@ export const useCloudSync = ({
     if (
       !shouldAutoSync({
         enabled: autoSync,
-        authenticated: Boolean(session),
+        authenticated,
         online: navigator.onLine,
         dirty: localDirty,
         hasConflict: Boolean(conflict),
@@ -234,45 +208,48 @@ export const useCloudSync = ({
       return;
     const timeout = window.setTimeout(() => void syncNow(), 3_000);
     return () => window.clearTimeout(timeout);
-  }, [autoSync, conflict, localDataVersion, localDirty, session, syncNow]);
+  }, [
+    authenticated,
+    autoSync,
+    conflict,
+    localDataVersion,
+    localDirty,
+    syncNow,
+  ]);
 
-  const signIn = useCallback(
-    async (email: string) => {
-      setStatus("checking");
-      try {
-        const auth = await getAuthGateway();
-        await auth.sendMagicLink(
-          email,
-          new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
-        );
-        setStatus("signed-out");
-        setMessage("登录链接已发送，请在当前设备打开邮件中的链接。");
+  useEffect(() => {
+    const handleOnline = () => {
+      if (autoSync && authenticated && !conflict) void syncNow();
+      else if (authenticated) {
+        setStatus("idle");
+        setMessage("网络已恢复，可以手动同步。");
         setError("");
-        return true;
-      } catch (caught) {
-        setStatus("error");
-        setError(toAppError(caught, "登录邮件发送失败。").message);
-        return false;
       }
-    },
-    [getAuthGateway],
-  );
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [authenticated, autoSync, conflict, syncNow]);
 
-  const signOut = useCallback(async () => {
-    setStatus("checking");
-    try {
-      const auth = await getAuthGateway();
-      await auth.signOut();
-      managerRef.current = null;
-      setSession(null);
-      setStatus("signed-out");
-      setMessage("已退出云同步，本地数据不受影响。");
-      setError("");
-    } catch (caught) {
-      setStatus("error");
-      setError(toAppError(caught, "退出登录失败。").message);
-    }
-  }, [getAuthGateway]);
+  const signIn = useCallback(() => {
+    window.open(getProvider().loginUrl, "_blank", "noopener,noreferrer");
+    setStatus("signed-out");
+    setMessage("已打开 Access 登录页；完成后返回并点击“检查登录状态”。");
+    setError("");
+  }, [getProvider]);
+
+  const signOut = useCallback(() => {
+    window.open(
+      `${APP_CONFIG.syncApiBaseUrl}/cdn-cgi/access/logout`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    setAuthenticated(false);
+    setUserEmail("");
+    managerRef.current = null;
+    setStatus("signed-out");
+    setMessage("已打开 Access 退出页，本地数据不受影响。");
+    setError("");
+  }, []);
 
   const restoreRemote = useCallback(
     () =>
@@ -283,21 +260,12 @@ export const useCloudSync = ({
       ),
     [execute],
   );
-  const overwriteRemote = useCallback(
+  const submitLocalVersion = useCallback(
     () =>
       execute(
-        (manager) => manager.overwriteRemote(),
+        (manager) => manager.submitLocalVersion(),
         "syncing",
-        "本地数据已覆盖云端快照。",
-      ),
-    [execute],
-  );
-  const deleteRemote = useCallback(
-    () =>
-      execute(
-        (manager) => manager.deleteRemote(),
-        "syncing",
-        "云端快照已删除，本地数据保留。",
+        "本地数据已提交为新的云端版本。",
       ),
     [execute],
   );
@@ -306,7 +274,7 @@ export const useCloudSync = ({
       execute(
         (manager) => manager.resolveWithLocal(),
         "syncing",
-        "已保留本地数据并覆盖云端。",
+        "已保留本地数据并提交新的云端版本。",
       ),
     [execute],
   );
@@ -319,19 +287,23 @@ export const useCloudSync = ({
       ),
     [execute],
   );
-  const exportConflict = useCallback((): ConflictExports | null => {
-    try {
-      return managerRef.current?.exportConflict() ?? null;
-    } catch (caught) {
-      setError(toAppError(caught, "冲突数据导出失败。").message);
-      return null;
-    }
-  }, []);
+
+  const exportConflict =
+    useCallback(async (): Promise<ConflictExports | null> => {
+      try {
+        return (await managerRef.current?.exportConflict()) ?? null;
+      } catch (caught) {
+        setError(toAppError(caught, "冲突数据导出失败。").message);
+        return null;
+      }
+    }, []);
+
   const cancelConflict = useCallback(() => {
     managerRef.current?.cancelConflict();
     setStatus("conflict");
     setMessage("已取消选择，冲突仍保留，期间不会自动同步。");
   }, []);
+
   const setAutoSync = useCallback((enabled: boolean) => {
     try {
       preferencesRef.current?.save({ autoSync: enabled });
@@ -345,9 +317,9 @@ export const useCloudSync = ({
 
   return {
     enabled: APP_CONFIG.cloudSyncEnabled,
-    configured: isSupabaseConfigured,
-    authenticated: Boolean(session),
-    userEmail: session?.user.email ?? "",
+    configured: isCloudSyncConfigured,
+    authenticated,
+    userEmail,
     status,
     message,
     error,
@@ -355,10 +327,10 @@ export const useCloudSync = ({
     autoSync,
     signIn,
     signOut,
+    checkSession,
     syncNow,
     restoreRemote,
-    overwriteRemote,
-    deleteRemote,
+    submitLocalVersion,
     resolveWithLocal,
     resolveWithRemote,
     exportConflict,

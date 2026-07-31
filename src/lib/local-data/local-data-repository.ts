@@ -1,38 +1,50 @@
 import type { z } from "zod";
-import { AppError, isQuotaExceededError } from "../errors/app-error";
+import { AppError } from "../errors/app-error";
+import { remoteSnapshotBaseSchema } from "../sync/schemas";
+import type { RemoteSnapshot } from "../sync/types";
 import {
   envelopeBaseSchema,
   exportBaseSchema,
   type AppDataExport,
   type LocalAppEnvelope,
+  type SyncStatus,
 } from "./envelope";
+import {
+  DexieKeyValueStore,
+  StorageKeyValueStore,
+  type AsyncKeyValueStore,
+} from "./key-value-store";
 import { migratePayload, type SchemaMigration } from "./schema-migrations";
 import { getStorageSizeInfo, type StorageSizeInfo } from "./storage-size";
-import { remoteSnapshotBaseSchema } from "../sync/schemas";
-import type { RemoteSnapshot } from "../sync/types";
 
 export interface LocalDataRepository<TPayload> {
-  load(): LocalAppEnvelope<TPayload>;
-  save(next: LocalAppEnvelope<TPayload>): void;
-  update(updater: (current: TPayload) => TPayload): LocalAppEnvelope<TPayload>;
-  reset(): LocalAppEnvelope<TPayload>;
-  exportJson(): string;
-  importJson(raw: string): LocalAppEnvelope<TPayload>;
-  getStorageSize(): StorageSizeInfo;
-  getLatestBackupJson(): string | null;
-  exportLatestBackupJson(): string | null;
-  getLatestRemoteBackupJson(): string | null;
-  createBackup(): string | null;
-  backupRemoteSnapshot(remote: RemoteSnapshot<unknown>): string;
+  load(): Promise<LocalAppEnvelope<TPayload>>;
+  save(next: LocalAppEnvelope<TPayload>): Promise<void>;
+  update(
+    updater: (current: TPayload) => TPayload,
+  ): Promise<LocalAppEnvelope<TPayload>>;
+  reset(): Promise<LocalAppEnvelope<TPayload>>;
+  exportJson(): Promise<string>;
+  importJson(raw: string): Promise<LocalAppEnvelope<TPayload>>;
+  getStorageSize(): Promise<StorageSizeInfo>;
+  getLatestBackupJson(): Promise<string | null>;
+  exportLatestBackupJson(): Promise<string | null>;
+  getLatestRemoteBackupJson(): Promise<string | null>;
+  createBackup(): Promise<string | null>;
+  backupRemoteSnapshot(remote: RemoteSnapshot<unknown>): Promise<string>;
   prepareRemoteSnapshot(
     remote: RemoteSnapshot<unknown>,
-  ): RemoteSnapshot<TPayload>;
+  ): Promise<RemoteSnapshot<TPayload>>;
   applyRemoteSnapshot(
     remote: RemoteSnapshot<unknown>,
-  ): LocalAppEnvelope<TPayload>;
-  markSynced(remote: RemoteSnapshot<unknown>): LocalAppEnvelope<TPayload>;
-  clearRemoteSyncState(): LocalAppEnvelope<TPayload>;
-  exportSnapshotJson(remote: RemoteSnapshot<unknown>): string;
+  ): Promise<LocalAppEnvelope<TPayload>>;
+  markSyncPending(commitId: string): Promise<LocalAppEnvelope<TPayload>>;
+  markSyncStatus(status: SyncStatus): Promise<LocalAppEnvelope<TPayload>>;
+  markSynced(
+    remote: RemoteSnapshot<unknown>,
+    uploadedDataVersion: number,
+  ): Promise<LocalAppEnvelope<TPayload>>;
+  exportSnapshotJson(remote: RemoteSnapshot<unknown>): Promise<string>;
 }
 
 interface LegacyStorageOptions<TPayload> {
@@ -44,11 +56,14 @@ export interface LocalRepositoryOptions<TPayload> {
   appId: string;
   schemaVersion: number;
   storageKey: string;
+  databaseName?: string;
   payloadSchema: z.ZodType<TPayload>;
   createDefaultPayload: () => TPayload;
   migrations?: Readonly<Record<number, SchemaMigration>>;
   legacy?: LegacyStorageOptions<TPayload>;
+  store?: AsyncKeyValueStore;
   storage?: Storage;
+  legacyStorage?: Storage;
   now?: () => Date;
   createId?: () => string;
 }
@@ -76,173 +91,171 @@ const stringifyJson = (value: unknown, formatted = false) => {
 export class BrowserLocalDataRepository<TPayload>
   implements LocalDataRepository<TPayload>
 {
-  private readonly storage: Storage;
+  private readonly store: AsyncKeyValueStore;
+  private readonly legacyStorage: Storage | null;
   private readonly now: () => Date;
   private readonly createId: () => string;
   private readonly migrations: Readonly<Record<number, SchemaMigration>>;
+  private mutationQueue: Promise<unknown> = Promise.resolve();
+  private initializationPromise: Promise<LocalAppEnvelope<TPayload>> | null =
+    null;
 
   constructor(private readonly options: LocalRepositoryOptions<TPayload>) {
-    this.storage = options.storage ?? window.localStorage;
+    this.store =
+      options.store ??
+      (options.storage
+        ? new StorageKeyValueStore(options.storage)
+        : new DexieKeyValueStore(
+            options.databaseName ?? `${options.appId}-local`,
+          ));
+    this.legacyStorage =
+      options.legacyStorage ??
+      options.storage ??
+      (typeof window === "undefined" ? null : window.localStorage);
     this.now = options.now ?? (() => new Date());
     this.createId = options.createId ?? (() => crypto.randomUUID());
     this.migrations = options.migrations ?? {};
   }
 
-  load(): LocalAppEnvelope<TPayload> {
-    const raw = this.read(this.options.storageKey);
-
+  async load(): Promise<LocalAppEnvelope<TPayload>> {
+    const raw = await this.store.get(this.options.storageKey);
     if (!raw) {
-      return this.initialize();
+      this.initializationPromise ??= this.initialize().catch(
+        (error: unknown) => {
+          this.initializationPromise = null;
+          throw error;
+        },
+      );
+      return this.initializationPromise;
     }
-
     return this.parseStoredEnvelope(raw);
   }
 
-  save(next: LocalAppEnvelope<TPayload>): void {
+  async save(next: LocalAppEnvelope<TPayload>): Promise<void> {
     const valid = this.validateCurrentEnvelope(next);
-    this.write(this.options.storageKey, stringifyJson(valid));
+    await this.store.set(this.options.storageKey, stringifyJson(valid));
   }
 
-  update(updater: (current: TPayload) => TPayload): LocalAppEnvelope<TPayload> {
-    const current = this.load();
-    let candidate: TPayload;
+  update(
+    updater: (current: TPayload) => TPayload,
+  ): Promise<LocalAppEnvelope<TPayload>> {
+    return this.withMutation(async () => {
+      const current = await this.load();
+      let candidate: TPayload;
+      try {
+        candidate = updater(current.payload);
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError(
+          "DATA_VALIDATION_FAILED",
+          "更新本地数据时失败。",
+          error,
+        );
+      }
+      const next: LocalAppEnvelope<TPayload> = {
+        ...current,
+        dataVersion: current.dataVersion + 1,
+        updatedAt: this.now().toISOString(),
+        payload: this.validatePayload(candidate),
+        sync: {
+          ...current.sync,
+          dirty: true,
+          lastSyncCommitId: null,
+          syncStatus: "pending",
+        },
+      };
+      await this.save(next);
+      return next;
+    });
+  }
 
-    try {
-      candidate = updater(current.payload);
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-      throw new AppError(
-        "DATA_VALIDATION_FAILED",
-        "更新本地数据时失败。",
-        error,
+  reset(): Promise<LocalAppEnvelope<TPayload>> {
+    return this.withMutation(async () => {
+      const current = await this.tryLoad();
+      await this.createBackup();
+      const next: LocalAppEnvelope<TPayload> = {
+        appId: this.options.appId,
+        schemaVersion: this.options.schemaVersion,
+        dataVersion: (current?.dataVersion ?? 0) + 1,
+        updatedAt: this.now().toISOString(),
+        deviceId: current?.deviceId ?? this.createId(),
+        payload: this.validatePayload(this.options.createDefaultPayload()),
+        sync: {
+          dirty: true,
+          lastCloudVersion: current?.sync.lastCloudVersion ?? null,
+          lastSyncAt: current?.sync.lastSyncAt ?? null,
+          lastSyncCommitId: null,
+          syncStatus: "pending",
+        },
+      };
+      await this.save(next);
+      return next;
+    });
+  }
+
+  async exportJson(): Promise<string> {
+    return this.toExportJson(await this.load());
+  }
+
+  importJson(raw: string): Promise<LocalAppEnvelope<TPayload>> {
+    return this.withMutation(async () => {
+      const parsed = exportBaseSchema.safeParse(
+        parseJson(raw, "导入文件不是有效的 JSON。"),
       );
-    }
-
-    const payload = this.validatePayload(candidate);
-    const next: LocalAppEnvelope<TPayload> = {
-      ...current,
-      dataVersion: current.dataVersion + 1,
-      updatedAt: this.now().toISOString(),
-      payload,
-      sync: {
-        ...current.sync,
-        dirty: true,
-      },
-    };
-
-    this.save(next);
-    return next;
-  }
-
-  reset(): LocalAppEnvelope<TPayload> {
-    let current: LocalAppEnvelope<TPayload> | null = null;
-
-    try {
-      current = this.load();
-    } catch {
-      // 显式重置是用户从损坏数据恢复的路径，原始字符串会在下方先备份。
-    }
-
-    this.backupCurrent();
-
-    const next: LocalAppEnvelope<TPayload> = {
-      appId: this.options.appId,
-      schemaVersion: this.options.schemaVersion,
-      dataVersion: (current?.dataVersion ?? 0) + 1,
-      updatedAt: this.now().toISOString(),
-      deviceId: current?.deviceId ?? this.createId(),
-      payload: this.validatePayload(this.options.createDefaultPayload()),
-      sync: {
-        dirty: true,
-        lastRemoteVersion: current?.sync.lastRemoteVersion ?? null,
-        lastSyncedAt: current?.sync.lastSyncedAt ?? null,
-      },
-    };
-
-    this.save(next);
-    return next;
-  }
-
-  exportJson(): string {
-    const current = this.load();
-    const exported: AppDataExport<TPayload> = {
-      format: "personal-web-seed-export",
-      appId: current.appId,
-      schemaVersion: current.schemaVersion,
-      dataVersion: current.dataVersion,
-      exportedAt: this.now().toISOString(),
-      payload: current.payload,
-    };
-
-    return stringifyJson(exported, true);
-  }
-
-  importJson(raw: string): LocalAppEnvelope<TPayload> {
-    const parsed = exportBaseSchema.safeParse(
-      parseJson(raw, "导入文件不是有效的 JSON。"),
-    );
-
-    if (!parsed.success) {
-      throw new AppError(
-        "DATA_VALIDATION_FAILED",
-        "导入文件格式不正确。",
-        parsed.error,
+      if (!parsed.success) {
+        throw new AppError(
+          "DATA_VALIDATION_FAILED",
+          "导入文件格式不正确。",
+          parsed.error,
+        );
+      }
+      if (parsed.data.appId !== this.options.appId) {
+        throw new AppError(
+          "DATA_VALIDATION_FAILED",
+          `该文件属于 ${parsed.data.appId}，不能导入到 ${this.options.appId}。`,
+        );
+      }
+      const payload = this.validatePayload(
+        migratePayload(
+          parsed.data.payload,
+          parsed.data.schemaVersion,
+          this.options.schemaVersion,
+          this.migrations,
+        ),
       );
-    }
-
-    if (parsed.data.appId !== this.options.appId) {
-      throw new AppError(
-        "DATA_VALIDATION_FAILED",
-        `该文件属于 ${parsed.data.appId}，不能导入到 ${this.options.appId}。`,
-      );
-    }
-
-    const migratedPayload = migratePayload(
-      parsed.data.payload,
-      parsed.data.schemaVersion,
-      this.options.schemaVersion,
-      this.migrations,
-    );
-    const payload = this.validatePayload(migratedPayload);
-
-    let current: LocalAppEnvelope<TPayload> | null = null;
-    try {
-      current = this.load();
-    } catch {
-      // 允许用户用有效导出文件恢复损坏的正式数据。
-    }
-
-    this.backupCurrent();
-
-    const next: LocalAppEnvelope<TPayload> = {
-      appId: this.options.appId,
-      schemaVersion: this.options.schemaVersion,
-      dataVersion:
-        Math.max(current?.dataVersion ?? 0, parsed.data.dataVersion) + 1,
-      updatedAt: this.now().toISOString(),
-      deviceId: current?.deviceId ?? this.createId(),
-      payload,
-      sync: {
-        dirty: true,
-        lastRemoteVersion: current?.sync.lastRemoteVersion ?? null,
-        lastSyncedAt: current?.sync.lastSyncedAt ?? null,
-      },
-    };
-
-    this.save(next);
-    return next;
+      const current = await this.tryLoad();
+      await this.createBackup();
+      const next: LocalAppEnvelope<TPayload> = {
+        appId: this.options.appId,
+        schemaVersion: this.options.schemaVersion,
+        dataVersion:
+          Math.max(current?.dataVersion ?? 0, parsed.data.dataVersion) + 1,
+        updatedAt: this.now().toISOString(),
+        deviceId: current?.deviceId ?? this.createId(),
+        payload,
+        sync: {
+          dirty: true,
+          lastCloudVersion: current?.sync.lastCloudVersion ?? null,
+          lastSyncAt: current?.sync.lastSyncAt ?? null,
+          lastSyncCommitId: null,
+          syncStatus: "pending",
+        },
+      };
+      await this.save(next);
+      return next;
+    });
   }
 
-  getStorageSize(): StorageSizeInfo {
-    return getStorageSizeInfo(this.read(this.options.storageKey));
+  async getStorageSize(): Promise<StorageSizeInfo> {
+    return getStorageSizeInfo(await this.store.get(this.options.storageKey));
   }
 
-  getLatestBackupJson(): string | null {
-    return this.read(this.backupKey);
+  getLatestBackupJson() {
+    return this.store.get(this.backupKey);
   }
 
-  exportLatestBackupJson(): string | null {
-    const raw = this.getLatestBackupJson();
+  async exportLatestBackupJson(): Promise<string | null> {
+    const raw = await this.getLatestBackupJson();
     if (!raw) return null;
     const parsed = envelopeBaseSchema.safeParse(
       parseJson(raw, "最近本地备份不是有效的 JSON。"),
@@ -254,37 +267,32 @@ export class BrowserLocalDataRepository<TPayload>
         parsed.success ? undefined : parsed.error,
       );
     }
-    const exported: AppDataExport<unknown> = {
-      format: "personal-web-seed-export",
-      appId: parsed.data.appId,
-      schemaVersion: parsed.data.schemaVersion,
-      dataVersion: parsed.data.dataVersion,
-      exportedAt: this.now().toISOString(),
-      payload: parsed.data.payload,
-    };
-    return stringifyJson(exported, true);
+    return this.toExportJson({
+      ...parsed.data,
+      payload: this.validatePayload(parsed.data.payload),
+    });
   }
 
-  getLatestRemoteBackupJson(): string | null {
-    return this.read(this.remoteBackupKey);
+  getLatestRemoteBackupJson() {
+    return this.store.get(this.remoteBackupKey);
   }
 
-  createBackup(): string | null {
-    const currentRaw = this.read(this.options.storageKey);
-    if (!currentRaw) return null;
-    this.write(this.backupKey, currentRaw);
-    return currentRaw;
+  async createBackup(): Promise<string | null> {
+    const raw = await this.store.get(this.options.storageKey);
+    if (!raw) return null;
+    await this.store.set(this.backupKey, raw);
+    return raw;
   }
 
-  backupRemoteSnapshot(remote: RemoteSnapshot<unknown>): string {
-    const exported = this.exportSnapshotJson(remote);
-    this.write(this.remoteBackupKey, exported);
+  async backupRemoteSnapshot(remote: RemoteSnapshot<unknown>): Promise<string> {
+    const exported = await this.exportSnapshotJson(remote);
+    await this.store.set(this.remoteBackupKey, exported);
     return exported;
   }
 
   prepareRemoteSnapshot(
     remote: RemoteSnapshot<unknown>,
-  ): RemoteSnapshot<TPayload> {
+  ): Promise<RemoteSnapshot<TPayload>> {
     const parsed = remoteSnapshotBaseSchema.safeParse(remote);
     if (!parsed.success) {
       throw new AppError(
@@ -299,109 +307,133 @@ export class BrowserLocalDataRepository<TPayload>
         `云端快照属于 ${parsed.data.appId}，当前应用无法读取。`,
       );
     }
-
-    const payload = this.validatePayload(
-      migratePayload(
-        parsed.data.payload,
-        parsed.data.schemaVersion,
-        this.options.schemaVersion,
-        this.migrations,
-      ),
-    );
-
-    return {
+    return Promise.resolve({
       ...parsed.data,
-      schemaVersion: this.options.schemaVersion,
-      payload,
-    };
+      payloadSchemaVersion: this.options.schemaVersion,
+      payload: this.validatePayload(
+        migratePayload(
+          parsed.data.payload,
+          parsed.data.payloadSchemaVersion,
+          this.options.schemaVersion,
+          this.migrations,
+        ),
+      ),
+    });
   }
 
-  applyRemoteSnapshot(
+  async applyRemoteSnapshot(
     remote: RemoteSnapshot<unknown>,
-  ): LocalAppEnvelope<TPayload> {
-    const prepared = this.prepareRemoteSnapshot(remote);
-    let current: LocalAppEnvelope<TPayload> | null = null;
-    try {
-      current = this.load();
-    } catch {
-      // 有效云端快照也是损坏本地数据的恢复路径。
-    }
-
-    this.createBackup();
+  ): Promise<LocalAppEnvelope<TPayload>> {
+    const prepared = await this.prepareRemoteSnapshot(remote);
+    const current = await this.tryLoad();
+    await this.createBackup();
     const next: LocalAppEnvelope<TPayload> = {
       appId: this.options.appId,
       schemaVersion: this.options.schemaVersion,
-      dataVersion: Math.max(current?.dataVersion ?? 0, prepared.dataVersion),
-      updatedAt: prepared.updatedAt,
+      dataVersion: (current?.dataVersion ?? 0) + 1,
+      updatedAt: this.now().toISOString(),
       deviceId: current?.deviceId ?? this.createId(),
       payload: prepared.payload,
       sync: {
         dirty: false,
-        lastRemoteVersion: prepared.dataVersion,
-        lastSyncedAt: this.now().toISOString(),
+        lastCloudVersion: prepared.version,
+        lastSyncAt: this.now().toISOString(),
+        lastSyncCommitId: prepared.commitId,
+        syncStatus: "synced",
       },
     };
-    this.save(next);
+    await this.save(next);
     return next;
   }
 
-  markSynced(remote: RemoteSnapshot<unknown>): LocalAppEnvelope<TPayload> {
-    const prepared = this.prepareRemoteSnapshot(remote);
-    const current = this.load();
-    const next: LocalAppEnvelope<TPayload> = {
-      ...current,
-      dataVersion: Math.max(current.dataVersion, prepared.dataVersion),
-      sync: {
-        dirty: false,
-        lastRemoteVersion: prepared.dataVersion,
-        lastSyncedAt: this.now().toISOString(),
-      },
-    };
-    this.save(next);
-    return next;
+  markSyncPending(commitId: string): Promise<LocalAppEnvelope<TPayload>> {
+    return this.withMutation(async () => {
+      const current = await this.load();
+      const next = {
+        ...current,
+        sync: {
+          ...current.sync,
+          lastSyncCommitId: commitId,
+          syncStatus: "syncing" as const,
+        },
+      };
+      await this.save(next);
+      return next;
+    });
   }
 
-  clearRemoteSyncState(): LocalAppEnvelope<TPayload> {
-    const current = this.load();
-    const next: LocalAppEnvelope<TPayload> = {
-      ...current,
-      sync: {
-        dirty: false,
-        lastRemoteVersion: null,
-        lastSyncedAt: this.now().toISOString(),
-      },
-    };
-    this.save(next);
-    return next;
+  markSyncStatus(status: SyncStatus): Promise<LocalAppEnvelope<TPayload>> {
+    return this.withMutation(async () => {
+      const current = await this.load();
+      const next = {
+        ...current,
+        sync: { ...current.sync, syncStatus: status },
+      };
+      await this.save(next);
+      return next;
+    });
   }
 
-  exportSnapshotJson(remote: RemoteSnapshot<unknown>): string {
-    const prepared = this.prepareRemoteSnapshot(remote);
+  markSynced(
+    remote: RemoteSnapshot<unknown>,
+    uploadedDataVersion: number,
+  ): Promise<LocalAppEnvelope<TPayload>> {
+    return this.withMutation(async () => {
+      const prepared = await this.prepareRemoteSnapshot(remote);
+      const current = await this.load();
+      const changedDuringUpload = current.dataVersion !== uploadedDataVersion;
+      const next: LocalAppEnvelope<TPayload> = {
+        ...current,
+        sync: {
+          dirty: changedDuringUpload,
+          lastCloudVersion: prepared.version,
+          lastSyncAt: this.now().toISOString(),
+          lastSyncCommitId: changedDuringUpload
+            ? current.sync.lastSyncCommitId
+            : prepared.commitId,
+          syncStatus: changedDuringUpload ? "pending" : "synced",
+        },
+      };
+      await this.save(next);
+      return next;
+    });
+  }
+
+  async exportSnapshotJson(remote: RemoteSnapshot<unknown>): Promise<string> {
+    const prepared = await this.prepareRemoteSnapshot(remote);
+    const current = await this.tryLoad();
     const exported: AppDataExport<TPayload> = {
       format: "personal-web-seed-export",
       appId: prepared.appId,
-      schemaVersion: prepared.schemaVersion,
-      dataVersion: prepared.dataVersion,
+      schemaVersion: prepared.payloadSchemaVersion,
+      dataVersion: current?.dataVersion ?? 1,
       exportedAt: this.now().toISOString(),
       payload: prepared.payload,
     };
     return stringifyJson(exported, true);
   }
 
-  private initialize(): LocalAppEnvelope<TPayload> {
-    const legacyRaw = this.options.legacy
-      ? this.read(this.options.legacy.key)
-      : null;
+  private async initialize(): Promise<LocalAppEnvelope<TPayload>> {
+    const oldEnvelopeRaw = this.readLegacy(this.options.storageKey);
+    if (oldEnvelopeRaw) {
+      await this.store.set(this.indexedDbMigrationBackupKey, oldEnvelopeRaw);
+      const migrated = await this.parseStoredEnvelope(oldEnvelopeRaw, false);
+      await this.save(migrated);
+      this.removeLegacy(this.options.storageKey);
+      return migrated;
+    }
 
+    const legacyRaw = this.options.legacy
+      ? this.readLegacy(this.options.legacy.key)
+      : null;
     if (legacyRaw && this.options.legacy) {
       const payload = this.validatePayload(
         this.options.legacy.parse(legacyRaw),
       );
       const migrated = this.createInitialEnvelope(payload, true);
-
-      this.write(this.legacyBackupKey, legacyRaw);
-      this.save(migrated);
-      this.remove(this.options.legacy.key);
+      await this.store.set(this.legacyBackupKey, legacyRaw);
+      await this.save(migrated);
+      this.removeLegacy(this.options.legacy.key);
       return migrated;
     }
 
@@ -409,15 +441,17 @@ export class BrowserLocalDataRepository<TPayload>
       this.validatePayload(this.options.createDefaultPayload()),
       false,
     );
-    this.save(initial);
+    await this.save(initial);
     return initial;
   }
 
-  private parseStoredEnvelope(raw: string): LocalAppEnvelope<TPayload> {
+  private async parseStoredEnvelope(
+    raw: string,
+    persistMigration = true,
+  ): Promise<LocalAppEnvelope<TPayload>> {
     const parsed = envelopeBaseSchema.safeParse(
       parseJson(raw, "本地数据不是有效的 JSON。"),
     );
-
     if (!parsed.success) {
       throw new AppError(
         "DATA_VALIDATION_FAILED",
@@ -425,40 +459,40 @@ export class BrowserLocalDataRepository<TPayload>
         parsed.error,
       );
     }
-
     if (parsed.data.appId !== this.options.appId) {
       throw new AppError(
         "DATA_VALIDATION_FAILED",
         `本地数据属于 ${parsed.data.appId}，当前应用无法读取。`,
       );
     }
-
     const requiresMigration =
       parsed.data.schemaVersion !== this.options.schemaVersion;
-    if (requiresMigration) this.backupCurrent();
-
-    const migratedPayload = migratePayload(
-      parsed.data.payload,
-      parsed.data.schemaVersion,
-      this.options.schemaVersion,
-      this.migrations,
-    );
-    const payload = this.validatePayload(migratedPayload);
+    if (requiresMigration && persistMigration) await this.createBackup();
     const envelope: LocalAppEnvelope<TPayload> = {
       ...parsed.data,
       schemaVersion: this.options.schemaVersion,
       dataVersion: requiresMigration
         ? parsed.data.dataVersion + 1
         : parsed.data.dataVersion,
-      payload,
+      payload: this.validatePayload(
+        migratePayload(
+          parsed.data.payload,
+          parsed.data.schemaVersion,
+          this.options.schemaVersion,
+          this.migrations,
+        ),
+      ),
     };
-
     if (requiresMigration) {
       envelope.updatedAt = this.now().toISOString();
-      envelope.sync = { ...envelope.sync, dirty: true };
-      this.save(envelope);
+      envelope.sync = {
+        ...envelope.sync,
+        dirty: true,
+        lastSyncCommitId: null,
+        syncStatus: "pending",
+      };
+      if (persistMigration) await this.save(envelope);
     }
-
     return envelope;
   }
 
@@ -475,8 +509,10 @@ export class BrowserLocalDataRepository<TPayload>
       payload,
       sync: {
         dirty,
-        lastRemoteVersion: null,
-        lastSyncedAt: null,
+        lastCloudVersion: null,
+        lastSyncAt: null,
+        lastSyncCommitId: null,
+        syncStatus: dirty ? "pending" : "idle",
       },
     };
   }
@@ -498,7 +534,6 @@ export class BrowserLocalDataRepository<TPayload>
         "准备写入的数据结构版本与当前应用不一致。",
       );
     }
-
     return {
       ...parsed.data,
       payload: this.validatePayload(parsed.data.payload),
@@ -517,48 +552,54 @@ export class BrowserLocalDataRepository<TPayload>
     return parsed.data;
   }
 
-  private backupCurrent() {
-    this.createBackup();
+  private toExportJson(envelope: LocalAppEnvelope<TPayload>) {
+    return stringifyJson(
+      {
+        format: "personal-web-seed-export",
+        appId: envelope.appId,
+        schemaVersion: envelope.schemaVersion,
+        dataVersion: envelope.dataVersion,
+        exportedAt: this.now().toISOString(),
+        payload: envelope.payload,
+      } satisfies AppDataExport<TPayload>,
+      true,
+    );
   }
 
-  private read(key: string) {
+  private tryLoad() {
+    return this.load().catch(() => null);
+  }
+
+  private withMutation<TResult>(action: () => Promise<TResult>) {
+    const pending = this.mutationQueue.then(action, action);
+    this.mutationQueue = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
+  }
+
+  private readLegacy(key: string) {
+    if (!this.legacyStorage) return null;
     try {
-      return this.storage.getItem(key);
+      return this.legacyStorage.getItem(key);
     } catch (error) {
       throw new AppError(
         "UNKNOWN",
-        "浏览器禁止访问本地存储，请检查隐私或站点设置。",
+        "读取旧 LocalStorage 数据失败，请检查浏览器隐私设置。",
         error,
       );
     }
   }
 
-  private write(key: string, value: string) {
+  private removeLegacy(key: string) {
+    if (!this.legacyStorage) return;
     try {
-      this.storage.setItem(key, value);
-    } catch (error) {
-      if (isQuotaExceededError(error)) {
-        throw new AppError(
-          "LOCAL_STORAGE_QUOTA_EXCEEDED",
-          "浏览器本地空间不足。请先导出数据并清理不再需要的内容。",
-          error,
-        );
-      }
-      throw new AppError(
-        "UNKNOWN",
-        "本地数据写入失败，请检查浏览器隐私或站点设置。",
-        error,
-      );
-    }
-  }
-
-  private remove(key: string) {
-    try {
-      this.storage.removeItem(key);
+      this.legacyStorage.removeItem(key);
     } catch (error) {
       throw new AppError(
         "UNKNOWN",
-        "旧数据已迁移，但无法清理旧存储键。",
+        "旧数据已迁移，但无法清理旧 LocalStorage 键。",
         error,
       );
     }
@@ -570,6 +611,10 @@ export class BrowserLocalDataRepository<TPayload>
 
   private get legacyBackupKey() {
     return `${this.options.storageKey}:legacy-backup`;
+  }
+
+  private get indexedDbMigrationBackupKey() {
+    return `${this.options.storageKey}:localstorage-backup`;
   }
 
   private get remoteBackupKey() {

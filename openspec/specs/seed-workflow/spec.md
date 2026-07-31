@@ -18,7 +18,7 @@
 #### Scenario: 配置外部增强
 
 - **WHEN** 开发者需要云同步或 DeepSeek 旅行规划
-- **THEN** START 说明 Supabase migration、RLS、Auth URL、公开变量、Magic Link、DeepSeek Key 保存与安全禁区
+- **THEN** START 说明 Worker/D1/R2 本地准备、Access、公开变量、DeepSeek Key 保存、Vercel 前端边界与安全禁区
 
 ### Requirement: OpenSpec 与 Codex 开发流程
 
@@ -41,9 +41,10 @@ START SHALL 记录从 Local-first 种子派生 Atlas 时替换和验证的配置
 #### Scenario: 创建派生项目
 
 - **WHEN** 开发者复制种子实现新工具
-- **THEN** 替换 appId、storageKey、Payload 类型、Zod Schema、迁移、Feature、PWA 品牌、环境变量和规范，并保持 Local-first
+- **THEN** 替换 appId、IndexedDB 数据库名、storageKey、Payload 类型、Zod Schema、迁移、Feature、PWA 品牌、环境变量和规范，并保持 Local-first
 
 ## Compatibility
 
 - 指南中的命令必须与 package scripts 和 CI 一致。
-- 未使用 Supabase 或 DeepSeek 的派生项目可以删除相应 UI，但不得破坏本地数据、恢复和质量门禁。
+- 未使用云同步或 DeepSeek 的派生项目可以删除相应 UI，但不得破坏本地数据、恢复和质量门禁。
+- MVP 验收后必须删除不再解释当前行为的 Seed 历史、旧厂商配置和失效代码，并保留有效迁移、恢复说明和回归测试。

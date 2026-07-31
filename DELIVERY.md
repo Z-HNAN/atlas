@@ -1,62 +1,50 @@
-# Atlas 1.0.0 首版交付说明
+# Atlas 本地可交付版本说明
 
 ## 交付结论
 
-当前仓库已经从 Local-first Todo Seed 派生为可独立运行的 Atlas 虚拟旅行收藏地图。纯本地模式具备完整手工闭环；DeepSeek、Nominatim 和 Supabase 是可选网络增强。
+Atlas 已完成本地优先数据架构升级。纯本地模式具备完整手工旅行闭环；DeepSeek、Nominatim 和 Cloudflare 快照同步是可选网络增强。
 
-交付形态为标准 Vite 项目：`npm run dev` 可本地开发，`npm run build` 生成纯静态 `dist/`，仓库内 `vercel.json` 已配置单页应用回退，可直接连接 Vercel 自行发布。
+交付形态为标准 Vite 项目：`npm run dev` 用于本地开发，`npm run build` 生成静态 `dist/`。`vercel.json` 已配置单页应用回退，后续可由维护者自行发布到 Vercel；本次没有执行线上发布。
 
 ## 已交付能力
 
-- Dashboard、旅行列表、AI/手工创建、旅行详情、世界收藏地图、登录和设置页面。
-- DeepSeek BYOK：C 端直连、当前官方模型、会话存储、主动持久化、清除、JSON Output、Zod 校验、一次修复和分层错误诊断。
-- Nominatim：串行队列、至少 1.1 秒间隔、国家/地区/搜索词评分、缓存、歧义与失败处理。
-- 人工确认：名称、搜索词、坐标、增删、顺序、推荐理由和地图 Popup。
-- 旅行记录：四种状态、地点到访、地点备注、1～10 分评分和旅行总结。
-- Atlas：全部、已到访、计划中、旅行、年份和主题筛选。
-- PLN：四半球 DMS、进位、严格 Custom/User XML、ASCII 文件名和浏览器下载。
-- Local-first：版本化 Envelope、Zod、dataVersion、dirty、导入导出、覆盖前备份和容量提示。
-- Supabase：Magic Link、乐观并发快照、人工冲突、规范化旅行表、owner RLS 和公开读取。
-- PWA：Atlas 图标、离线应用壳、更新提示和分享封面。
+- Dashboard、旅行列表、AI/手工创建、旅行详情、世界收藏地图、Access 登录入口和设置页面。
+- DeepSeek BYOK 浏览器直连、会话存储、主动持久化、Zod 校验、一次修复和分层错误诊断。
+- Nominatim 串行队列、至少 1.1 秒间隔、匹配评分、IndexedDB 缓存、歧义与失败处理。
+- 旅行四种状态、地点到访与备注、评分、总结、地图和严格 Sky4Sim PLN 导出。
+- IndexedDB 版本化 Envelope、旧 LocalStorage 一次性安全迁移、JSON 导入导出、覆盖前备份和容量提示。
+- Cloudflare Access + Worker + D1 元数据 + 私有 R2 不可变快照；幂等提交、乐观并发、人工冲突和版本保留。
+- Vercel 前端配置、Cloudflare Worker 独立配置模板、PWA 离线应用壳和更新提示。
 
-## 自动验证证据
+## 自动验证
 
-```text
-typecheck       通过
-lint            通过（0 warning）
-test            16 个测试文件、54 项测试全部通过
-format:check    通过
-build           通过
-OpenSpec        9 项当前主规范 strict 校验通过
-```
-
-生产预览已验证以下路径或资源返回 HTTP 200 与正确 Content-Type：
+交付时执行并要求全部通过：
 
 ```text
-/
-/login
-/atlas
-/trips
-/trips/new
-/settings
-/manifest.webmanifest
-/sw.js
-/og.png
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run format:check
+npm run build
+openspec validate 2026-07-30-cloudflare-snapshot-sync --strict
 ```
 
-## 仍需交付者使用真实环境验收
+浏览器回归覆盖手工创建旅行、添加地点、触发“查询全部未确认地点”、Nominatim 返回、刷新恢复和设置页元数据。
 
-以下项目需要用户账号、本机软件或生产项目，仓库内自动测试无法代替：
+## 仍需真实环境验收
 
-1. 使用真实 DeepSeek Key 验证当前账号的余额和模型权限；官方端点 CORS 已用不含真实凭证的预检与 401 响应验证。
-2. 在 Supabase 生产项目执行两份 migration，并写入 owner 用户 UUID。
-3. 使用两个账号验证公开读取、非 owner 禁止写入和私有快照隔离。
-4. 使用富士山—河口湖—箱根—东京湾路线导出 PLN，在 Sky4Sim 中核对顺序和坐标。
-5. 在生产域名补齐 Supabase Auth Redirect URL。
+以下项目依赖维护者账号、本机软件或生产项目：
+
+1. 使用真实 DeepSeek Key 验证余额和模型权限。
+2. 创建 Cloudflare Access Application、D1 和私有 R2，应用 Worker migration 并预配置 Atlas 成员。
+3. 使用两个成员验证冲突、历史版本、readonly 权限和跨用户隔离。
+4. 把 Vercel 正式 Origin 加入 Worker CORS 和 Access Application。
+5. 使用富士山—河口湖—箱根—东京湾路线，在 Sky4Sim 中核对 PLN。
 
 ## 交付入口
 
-- 产品与安全说明：`README.md`
-- 启动、Supabase、部署和人工验收：`START.md`
-- 方案、风险与迁移：`openspec/changes/archive/2026-07-30-ai-virtual-travel-atlas/`
-- 数据库与 RLS：`supabase/migrations/`
+- 产品与架构说明：`README.md`
+- 本地启动、Cloudflare 准备和后续手动发布：`START.md`
+- Codex/OpenSpec 协作规则：`agents.md`
+- Worker 和 D1：`worker/`
+- 本次方案、风险与迁移：`openspec/changes/archive/2026-07-30-cloudflare-snapshot-sync/`

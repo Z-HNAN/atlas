@@ -1,5 +1,5 @@
-export const STORAGE_WARNING_BYTES = 2 * 1024 * 1024;
-export const STORAGE_CRITICAL_BYTES = 4 * 1024 * 1024;
+export const STORAGE_WARNING_BYTES = 10 * 1024 * 1024;
+export const STORAGE_CRITICAL_BYTES = 18 * 1024 * 1024;
 
 export type StorageSizeLevel = "normal" | "warning" | "critical";
 

@@ -12,124 +12,111 @@ interface SyncManagerOptions<TPayload> {
   repository: LocalDataRepository<TPayload>;
   provider: SyncProvider<TPayload>;
   isPayloadEmpty: (payload: TPayload) => boolean;
+  createCommitId?: () => string;
 }
 
 export class SyncManager<TPayload> {
   private conflict: SyncConflict<TPayload> | null = null;
+  private readonly createCommitId: () => string;
 
-  constructor(private readonly options: SyncManagerOptions<TPayload>) {}
+  constructor(private readonly options: SyncManagerOptions<TPayload>) {
+    this.createCommitId = options.createCommitId ?? (() => crypto.randomUUID());
+  }
 
   getConflict() {
     return this.conflict;
   }
 
   async sync(): Promise<SyncResult<TPayload>> {
-    const local = this.options.repository.load();
-    const remoteRaw = await this.options.provider.pull();
+    const local = await this.options.repository.load();
+    const remoteRaw = await this.options.provider.pullLatest();
+    if (!remoteRaw) return this.pushLocal(null);
 
-    if (!remoteRaw) {
-      return this.pushLocal(null);
-    }
-
-    const remote = this.options.repository.prepareRemoteSnapshot(remoteRaw);
-    const lastRemoteVersion = local.sync.lastRemoteVersion;
+    const remote =
+      await this.options.repository.prepareRemoteSnapshot(remoteRaw);
+    const lastCloudVersion = local.sync.lastCloudVersion;
 
     if (
       !local.sync.dirty &&
-      lastRemoteVersion === null &&
+      lastCloudVersion === null &&
       this.options.isPayloadEmpty(local.payload)
     ) {
-      this.options.repository.applyRemoteSnapshot(remote);
+      await this.options.repository.applyRemoteSnapshot(remote);
       this.conflict = null;
-      return this.synced("downloaded", remote.dataVersion);
+      return this.synced("downloaded", remote.version);
     }
 
-    if (!local.sync.dirty && lastRemoteVersion !== null) {
-      if (remote.dataVersion > lastRemoteVersion) {
-        this.options.repository.applyRemoteSnapshot(remote);
+    if (!local.sync.dirty && lastCloudVersion !== null) {
+      if (remote.version > lastCloudVersion) {
+        await this.options.repository.applyRemoteSnapshot(remote);
         this.conflict = null;
-        return this.synced("downloaded", remote.dataVersion);
+        return this.synced("downloaded", remote.version);
       }
-
-      if (remote.dataVersion === lastRemoteVersion) {
+      if (remote.version === lastCloudVersion) {
         this.conflict = null;
-        return this.synced("none", remote.dataVersion);
+        return this.synced("none", remote.version);
       }
     }
 
     if (
       local.sync.dirty &&
-      lastRemoteVersion !== null &&
-      remote.dataVersion === lastRemoteVersion
+      lastCloudVersion !== null &&
+      remote.version === lastCloudVersion
     ) {
-      return this.pushLocal(remote.dataVersion);
+      return this.pushLocal(remote.version);
     }
 
     return this.createConflict(remote);
   }
 
   async restoreRemote(): Promise<SyncResult<TPayload>> {
-    const remoteRaw = await this.options.provider.pull();
+    const remoteRaw = await this.options.provider.pullLatest();
     if (!remoteRaw) {
       throw new AppError("INVALID_RESPONSE", "云端还没有可恢复的快照。");
     }
-
-    const remote = this.options.repository.prepareRemoteSnapshot(remoteRaw);
-    this.options.repository.applyRemoteSnapshot(remote);
+    const remote =
+      await this.options.repository.prepareRemoteSnapshot(remoteRaw);
+    await this.options.repository.applyRemoteSnapshot(remote);
     this.conflict = null;
-    return this.synced("downloaded", remote.dataVersion);
+    return this.synced("downloaded", remote.version);
   }
 
-  async overwriteRemote(): Promise<SyncResult<TPayload>> {
-    const remoteRaw = await this.options.provider.pull();
-    const preparedRemote = remoteRaw
-      ? this.options.repository.prepareRemoteSnapshot(remoteRaw)
+  async submitLocalVersion(): Promise<SyncResult<TPayload>> {
+    const remoteRaw = await this.options.provider.pullLatest();
+    const remote = remoteRaw
+      ? await this.options.repository.prepareRemoteSnapshot(remoteRaw)
       : null;
-    if (preparedRemote) {
-      this.options.repository.backupRemoteSnapshot(preparedRemote);
-    }
-    this.options.repository.createBackup();
-    const expectedRemoteVersion = preparedRemote?.dataVersion ?? null;
-    return this.pushLocal(expectedRemoteVersion);
-  }
-
-  async deleteRemote(): Promise<SyncResult<TPayload>> {
-    const remoteRaw = await this.options.provider.pull();
-    if (remoteRaw) {
-      this.options.repository.backupRemoteSnapshot(remoteRaw);
-    }
-    await this.options.provider.remove();
-    this.options.repository.clearRemoteSyncState();
-    this.conflict = null;
-    return this.synced("remote-deleted", null);
+    if (remote) await this.options.repository.backupRemoteSnapshot(remote);
+    await this.options.repository.createBackup();
+    return this.pushLocal(remote?.version ?? null);
   }
 
   async resolveWithLocal(): Promise<SyncResult<TPayload>> {
     if (!this.conflict) {
       throw new AppError("SYNC_CONFLICT", "当前没有需要处理的同步冲突。");
     }
-    this.options.repository.createBackup();
-    this.options.repository.backupRemoteSnapshot(this.conflict.remote);
-    return this.pushLocal(this.conflict.remote.dataVersion);
+    await this.options.repository.createBackup();
+    await this.options.repository.backupRemoteSnapshot(this.conflict.remote);
+    return this.pushLocal(this.conflict.remote.version);
   }
 
-  resolveWithRemote(): SyncResult<TPayload> {
+  async resolveWithRemote(): Promise<SyncResult<TPayload>> {
     if (!this.conflict) {
       throw new AppError("SYNC_CONFLICT", "当前没有需要处理的同步冲突。");
     }
     const remote = this.conflict.remote;
-    this.options.repository.applyRemoteSnapshot(remote);
+    await this.options.repository.applyRemoteSnapshot(remote);
     this.conflict = null;
-    return this.synced("downloaded", remote.dataVersion);
+    return this.synced("downloaded", remote.version);
   }
 
-  exportConflict(): ConflictExports {
+  async exportConflict(): Promise<ConflictExports> {
     if (!this.conflict) {
       throw new AppError("SYNC_CONFLICT", "当前没有可导出的同步冲突。");
     }
     return {
-      localJson: this.options.repository.exportJson(),
-      remoteJson: this.options.repository.exportSnapshotJson(
+      localJson: await this.options.repository.exportJson(),
+      remoteJson: await this.options.repository.exportSnapshotJson(
         this.conflict.remote,
       ),
     };
@@ -140,26 +127,34 @@ export class SyncManager<TPayload> {
   }
 
   private async pushLocal(
-    expectedRemoteVersion: number | null,
+    baseVersion: number | null,
   ): Promise<SyncResult<TPayload>> {
-    const local = this.options.repository.load();
+    let local = await this.options.repository.load();
+    const commitId =
+      local.sync.dirty && local.sync.lastSyncCommitId
+        ? local.sync.lastSyncCommitId
+        : this.createCommitId();
+    local = await this.options.repository.markSyncPending(commitId);
     try {
       const remoteRaw = await this.options.provider.push({
         payload: local.payload,
-        schemaVersion: local.schemaVersion,
-        dataVersion: local.dataVersion,
-        expectedRemoteVersion,
+        payloadSchemaVersion: local.schemaVersion,
+        baseVersion,
+        commitId,
         deviceId: local.deviceId,
       });
-      const remote = this.options.repository.prepareRemoteSnapshot(remoteRaw);
-      this.options.repository.markSynced(remote);
+      const remote =
+        await this.options.repository.prepareRemoteSnapshot(remoteRaw);
+      await this.options.repository.markSynced(remote, local.dataVersion);
       this.conflict = null;
-      return this.synced("uploaded", remote.dataVersion);
+      return this.synced("uploaded", remote.version);
     } catch (error) {
       if (!(error instanceof AppError)) throw error;
-      if (error.code !== "REMOTE_VERSION_MISMATCH") throw error;
-
-      const latestRaw = await this.options.provider.pull();
+      if (error.code !== "REMOTE_VERSION_MISMATCH") {
+        await this.options.repository.markSyncStatus("error");
+        throw error;
+      }
+      const latestRaw = await this.options.provider.pullLatest();
       if (!latestRaw) {
         throw new AppError(
           "REMOTE_VERSION_MISMATCH",
@@ -167,27 +162,29 @@ export class SyncManager<TPayload> {
           error,
         );
       }
-      const latest = this.options.repository.prepareRemoteSnapshot(latestRaw);
+      const latest =
+        await this.options.repository.prepareRemoteSnapshot(latestRaw);
       return this.createConflict(latest);
     }
   }
 
-  private createConflict(
+  private async createConflict(
     remote: RemoteSnapshot<TPayload>,
-  ): SyncResult<TPayload> {
-    const local = this.options.repository.load();
+  ): Promise<SyncResult<TPayload>> {
+    const local = await this.options.repository.load();
     this.conflict = {
       localPayload: local.payload,
       localDataVersion: local.dataVersion,
       remote,
     };
+    await this.options.repository.markSyncStatus("conflict");
     return { status: "conflict", action: "conflict", conflict: this.conflict };
   }
 
   private synced(
-    action: "none" | "uploaded" | "downloaded" | "remote-deleted",
-    remoteVersion: number | null,
+    action: "none" | "uploaded" | "downloaded",
+    cloudVersion: number | null,
   ): SyncResult<TPayload> {
-    return { status: "synced", action, remoteVersion };
+    return { status: "synced", action, cloudVersion };
   }
 }

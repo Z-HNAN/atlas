@@ -8,7 +8,7 @@
 
 ### Requirement: Local-first 旅行生命周期
 
-系统 SHALL 在未联网、未登录、未配置 Supabase 时提供旅行草稿、地点编辑、状态、到访、评分和总结；UI SHALL NOT 直接操作浏览器存储。
+系统 SHALL 在未联网、未登录、未配置同步 Worker 时提供旅行草稿、地点编辑、状态、到访、评分和总结；UI SHALL NOT 直接操作浏览器存储。
 
 #### Scenario: 离线创建与刷新
 
@@ -31,12 +31,22 @@
 
 ### Requirement: 地点解析与人工确认
 
-系统 SHALL 串行调用 Nominatim、至少间隔 1.1 秒、缓存结果、根据国家/地区/搜索词评分，并 SHALL 对歧义或失败地点要求人工处理。
+系统 SHALL 通过统一 `BrowserHttpClient` 串行调用 Nominatim、至少间隔 1.1 秒、缓存结果、根据国家/地区/搜索词评分，并 SHALL 对歧义或失败地点要求人工处理。
 
 #### Scenario: 歧义结果
 
 - **WHEN** 两个候选匹配分数接近
 - **THEN** 地点标记为 ambiguous，用户确认坐标后才能确认旅行
+
+#### Scenario: 查询超时或无 HTTP 响应
+
+- **WHEN** Nominatim 请求超时或在获得 HTTP 响应前失败
+- **THEN** 系统分别显示超时或网络阶段提示，保留既有坐标与缓存且不把失败武断归因为 CORS
+
+#### Scenario: 没有待查询地点
+
+- **WHEN** 用户点击“查询全部未确认地点”但全部地点已经确认
+- **THEN** 系统明确提示无需查询，不发起无意义网络请求
 
 ### Requirement: 状态与记录
 
@@ -49,5 +59,5 @@
 
 ## Compatibility
 
-- AI、地理编码和 Supabase 失败不得阻断手工规划、既有旅行记录和已确认路线导出。
+- AI、地理编码和云同步失败不得阻断手工规划、既有旅行记录和已确认路线导出。
 - 旅行结构变化必须递增 schemaVersion 并提供顺序迁移。

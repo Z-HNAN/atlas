@@ -6,7 +6,7 @@ import {
 } from "../../src/lib/local-data/storage-size";
 
 describe("本地数据容量分级", () => {
-  it("按 2 MB 和 4 MB 阈值给出状态", () => {
+  it("按 10 MB 和 18 MB 阈值给出状态", () => {
     expect(getStorageSizeInfo("small").level).toBe("normal");
     expect(getStorageSizeInfo("a".repeat(STORAGE_WARNING_BYTES)).level).toBe(
       "warning",

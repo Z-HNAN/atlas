@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { APP_CONFIG } from "../../../config/app-config";
 import { AppError } from "../../../lib/errors/app-error";
+import {
+  BrowserHttpError,
+  KyBrowserHttpClient,
+  isBrowserOnline,
+  type BrowserHttpClient,
+} from "../../../lib/http/browser-http-client";
 import type { ExternalApiProvider } from "../../../lib/providers/types";
 import {
   generatedTravelPlanSchema,
@@ -23,16 +29,13 @@ const chatResponseSchema = z
   .passthrough();
 
 interface ProviderDependencies {
-  fetch?: typeof fetch;
+  httpClient?: BrowserHttpClient;
   timeoutMs?: number;
   wait?: (milliseconds: number) => Promise<void>;
 }
 
 const wait = (milliseconds: number) =>
   new Promise<void>((resolve) => globalThis.setTimeout(resolve, milliseconds));
-
-const isOnline = () =>
-  typeof navigator === "undefined" || navigator.onLine !== false;
 
 export const stripMarkdownCodeFence = (content: string) => {
   const trimmed = content.trim();
@@ -71,12 +74,12 @@ export class DeepSeekTravelPlannerProvider
   implements ExternalApiProvider<TravelPlanInput, GeneratedTravelPlan>
 {
   readonly id = "deepseek";
-  private readonly request: typeof fetch;
+  private readonly httpClient: BrowserHttpClient;
   private readonly timeoutMs: number;
   private readonly wait: (milliseconds: number) => Promise<void>;
 
   constructor(dependencies: ProviderDependencies = {}) {
-    this.request = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
+    this.httpClient = dependencies.httpClient ?? new KyBrowserHttpClient();
     this.timeoutMs = dependencies.timeoutMs ?? 30_000;
     this.wait = dependencies.wait ?? wait;
   }
@@ -100,7 +103,7 @@ export class DeepSeekTravelPlannerProvider
         "请先在设置页保存 DeepSeek API Key。",
       );
     }
-    if (!isOnline()) {
+    if (!isBrowserOnline()) {
       throw new AppError("OFFLINE", "当前离线，无法生成 AI 旅行计划。");
     }
 
@@ -142,15 +145,6 @@ export class DeepSeekTravelPlannerProvider
     externalSignal: AbortSignal | undefined,
     invalidOutput: string,
   ) {
-    const controller = new AbortController();
-    const abortFromCaller = () => controller.abort(externalSignal?.reason);
-    if (externalSignal?.aborted) abortFromCaller();
-    externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
-    const timeout = globalThis.setTimeout(
-      () => controller.abort(),
-      this.timeoutMs,
-    );
-
     const systemPrompt =
       "你是虚拟旅行策划师。为 Microsoft Flight Simulator 目视探索设计景点顺序，但不要提供经纬度、机场、航路或航空导航建议。必须只输出 JSON：title、summary、region、theme、points；每个 point 必须包含 nameZh、nameLocal、country、region、searchQuery、reason、order。order 从 1 连续编号且不重复。searchQuery 要适合 OpenStreetMap Nominatim 地理编码。";
     const originalRequest = [
@@ -166,7 +160,7 @@ export class DeepSeekTravelPlannerProvider
       : originalRequest;
 
     try {
-      return await this.request(
+      return await this.httpClient.request(
         `${APP_CONFIG.deepSeekBaseUrl}/chat/completions`,
         {
           method: "POST",
@@ -185,33 +179,36 @@ export class DeepSeekTravelPlannerProvider
             max_tokens: 1800,
             stream: false,
           }),
-          signal: controller.signal,
+          signal: externalSignal,
+          timeoutMs: this.timeoutMs,
         },
       );
     } catch (error) {
-      if (!isOnline()) {
+      if (!isBrowserOnline()) {
         throw new AppError("OFFLINE", "当前离线，无法生成 AI 旅行计划。");
       }
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (error instanceof BrowserHttpError && error.kind === "aborted") {
+        throw new AppError("NETWORK_ERROR", "AI 旅行计划请求已取消。", error);
+      }
+      if (error instanceof BrowserHttpError && error.kind === "timeout") {
         throw new AppError(
           "NETWORK_ERROR",
-          externalSignal?.aborted
-            ? "AI 旅行计划请求已取消。"
-            : "AI 旅行计划请求超时，请稍后重试。",
+          "AI 旅行计划请求超时，请稍后重试。",
           error,
         );
       }
-      if (error instanceof TypeError) {
+      if (error instanceof BrowserHttpError && error.kind === "network") {
         throw new AppError(
           "NETWORK_ERROR",
           "未能连接 DeepSeek（未收到 HTTP 响应）。请检查网络、代理、浏览器扩展或 API 地址；官方端点当前支持浏览器直连。",
           error,
         );
       }
-      throw new AppError("NETWORK_ERROR", "DeepSeek 请求失败。", error);
-    } finally {
-      globalThis.clearTimeout(timeout);
-      externalSignal?.removeEventListener("abort", abortFromCaller);
+      throw new AppError(
+        "NETWORK_ERROR",
+        "DeepSeek 请求在发送前失败，请刷新页面后重试。",
+        error,
+      );
     }
   }
 

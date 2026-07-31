@@ -4,9 +4,10 @@
 interface ImportMetaEnv {
   readonly VITE_APP_ID?: string;
   readonly VITE_ENABLE_CLOUD_SYNC?: "true" | "false";
-  readonly VITE_SUPABASE_URL?: string;
-  readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
+  readonly VITE_SYNC_API_BASE_URL?: string;
   readonly VITE_DEEPSEEK_MODEL?: string;
+  readonly VITE_DEEPSEEK_BASE_URL?: string;
+  readonly VITE_NOMINATIM_BASE_URL?: string;
 }
 
 interface ImportMeta {

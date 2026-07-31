@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import TravelMap from "../components/map/TravelMap";
-import type { TripOperationResult } from "../features/trips/hooks/useTrips";
+import type { TripOperation } from "../features/trips/hooks/useTrips";
 import { downloadPln } from "../features/trips/pln/generate-pln";
 import {
   NominatimGeocoder,
@@ -18,13 +18,10 @@ import { toAppError } from "../lib/errors/app-error";
 interface TripDetailProps {
   trips: Trip[];
   geocodeCache: GeocodeCacheEntry[];
-  onReplaceTrip: (trip: Trip) => TripOperationResult<Trip>;
-  onRemoveTrip: (id: string) => TripOperationResult;
-  onAddPoint: (
-    tripId: string,
-    nameZh?: string,
-  ) => TripOperationResult<TravelPoint>;
-  onCacheGeocode: (entry: GeocodeCacheEntry) => TripOperationResult;
+  onReplaceTrip: (trip: Trip) => TripOperation<Trip>;
+  onRemoveTrip: (id: string) => TripOperation;
+  onAddPoint: (tripId: string, nameZh?: string) => TripOperation<TravelPoint>;
+  onCacheGeocode: (entry: GeocodeCacheEntry) => TripOperation;
 }
 
 const TripDetail = ({
@@ -78,8 +75,8 @@ const TripDetail = ({
     );
   }
 
-  const save = (candidate: Trip, successMessage: string) => {
-    const result = onReplaceTrip(candidate);
+  const save = async (candidate: Trip, successMessage: string) => {
+    const result = await onReplaceTrip(candidate);
     if (!result.ok) {
       setError(result.error);
       return false;
@@ -134,7 +131,7 @@ const TripDetail = ({
           ),
           updatedAt: new Date().toISOString(),
         };
-        save(next, "未找到可靠坐标，请修改搜索词或手工填写。");
+        await save(next, "未找到可靠坐标，请修改搜索词或手工填写。");
         return;
       }
       const next = {
@@ -154,14 +151,15 @@ const TripDetail = ({
         ),
         updatedAt: new Date().toISOString(),
       };
-      const saved = save(
+      const saved = await save(
         next,
         resolution.status === "ambiguous"
           ? "找到多个相近结果，请检查地图后手工确认。"
           : "地点坐标已解析并保存。",
       );
       if (saved && resolution.status === "resolved") {
-        onCacheGeocode(resolution.cacheEntry);
+        const cached = await onCacheGeocode(resolution.cacheEntry);
+        if (!cached.ok) setError(cached.error);
       }
     } catch (caught) {
       setError(toAppError(caught, "地点查询失败。").message);
@@ -243,9 +241,15 @@ const TripDetail = ({
         setError(toAppError(caught, `${target.nameZh} 查询失败。`).message);
       }
     }
-    const saved = save(next, "批量查询完成，请人工检查歧义或失败地点。");
+    const saved = await save(next, "批量查询完成，请人工检查歧义或失败地点。");
     if (saved) {
-      newCacheEntries.forEach((entry) => onCacheGeocode(entry));
+      for (const entry of newCacheEntries) {
+        const cached = await onCacheGeocode(entry);
+        if (!cached.ok) {
+          setError(cached.error);
+          break;
+        }
+      }
     }
     setGeocoding("");
   };
@@ -284,7 +288,7 @@ const TripDetail = ({
     });
   };
 
-  const changeStatus = (status: Trip["status"]) => {
+  const changeStatus = async (status: Trip["status"]) => {
     if (status === "planned" && !allConfirmed) {
       setError("确认计划前，至少添加两个地点并确认全部坐标。");
       return;
@@ -302,7 +306,7 @@ const TripDetail = ({
       completedAt: status === "completed" ? now : null,
       updatedAt: now,
     };
-    save(next, `旅行状态已更新为“${TRIP_STATUS_LABEL[status]}”。`);
+    await save(next, `旅行状态已更新为“${TRIP_STATUS_LABEL[status]}”。`);
   };
 
   return (
@@ -316,11 +320,13 @@ const TripDetail = ({
             className="danger-link"
             type="button"
             onClick={() => {
-              if (!window.confirm(`确认删除“${draft.title}”及全部地点吗？`))
-                return;
-              const result = onRemoveTrip(draft.id);
-              if (result.ok) navigate("/trips");
-              else setError(result.error);
+              void (async () => {
+                if (!window.confirm(`确认删除“${draft.title}”及全部地点吗？`))
+                  return;
+                const result = await onRemoveTrip(draft.id);
+                if (result.ok) navigate("/trips");
+                else setError(result.error);
+              })();
             }}
           >
             删除旅行
@@ -343,7 +349,7 @@ const TripDetail = ({
           <button
             className="primary-btn"
             type="button"
-            onClick={() => save(draft, "旅行修改已保存。")}
+            onClick={() => void save(draft, "旅行修改已保存。")}
           >
             保存修改
           </button>
@@ -410,7 +416,7 @@ const TripDetail = ({
               <button
                 type="button"
                 className="primary-btn"
-                onClick={() => changeStatus("planned")}
+                onClick={() => void changeStatus("planned")}
                 disabled={!allConfirmed}
               >
                 确认旅行计划
@@ -420,7 +426,7 @@ const TripDetail = ({
               <button
                 type="button"
                 className="primary-btn"
-                onClick={() => changeStatus("in_progress")}
+                onClick={() => void changeStatus("in_progress")}
               >
                 开始旅行
               </button>
@@ -429,7 +435,7 @@ const TripDetail = ({
               <button
                 type="button"
                 className="primary-btn"
-                onClick={() => changeStatus("completed")}
+                onClick={() => void changeStatus("completed")}
               >
                 完成旅行
               </button>
@@ -438,7 +444,7 @@ const TripDetail = ({
               <button
                 type="button"
                 className="ghost-btn"
-                onClick={() => changeStatus("draft")}
+                onClick={() => void changeStatus("draft")}
               >
                 退回草稿编辑
               </button>
@@ -489,10 +495,12 @@ const TripDetail = ({
               className="primary-btn"
               type="button"
               onClick={() => {
-                if (!save(draft, "当前修改已保存。")) return;
-                const result = onAddPoint(draft.id);
-                if (!result.ok) setError(result.error);
-                else setMessage("新地点已添加到路线末尾。");
+                void (async () => {
+                  if (!(await save(draft, "当前修改已保存。"))) return;
+                  const result = await onAddPoint(draft.id);
+                  if (!result.ok) setError(result.error);
+                  else setMessage("新地点已添加到路线末尾。");
+                })();
               }}
             >
               添加地点

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NominatimGeocoder } from "../../src/features/trips/providers/nominatim-geocoder";
+import {
+  BrowserHttpError,
+  type BrowserHttpClient,
+} from "../../src/lib/http/browser-http-client";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -7,7 +11,7 @@ afterEach(() => {
 
 describe("NominatimGeocoder", () => {
   it("根据国家和地区评分，不无条件选择第一个结果", async () => {
-    const request = vi.fn<typeof fetch>().mockResolvedValue(
+    const request = vi.fn<BrowserHttpClient["request"]>().mockResolvedValue(
       new Response(
         JSON.stringify([
           {
@@ -29,7 +33,7 @@ describe("NominatimGeocoder", () => {
       ),
     );
     const geocoder = new NominatimGeocoder({
-      fetch: request,
+      httpClient: { request },
       now: () => new Date("2026-07-30T00:00:00Z"),
     });
 
@@ -50,8 +54,8 @@ describe("NominatimGeocoder", () => {
   });
 
   it("命中持久缓存时不发网络请求", async () => {
-    const request = vi.fn<typeof fetch>();
-    const geocoder = new NominatimGeocoder({ fetch: request });
+    const request = vi.fn<BrowserHttpClient["request"]>();
+    const geocoder = new NominatimGeocoder({ httpClient: { request } });
     const result = await geocoder.resolve(
       { searchQuery: "Fuji", country: "Japan", region: "" },
       [
@@ -98,5 +102,22 @@ describe("NominatimGeocoder", () => {
 
     expect(result.status).toBe("resolved");
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("将超时与普通网络失败区分为可操作提示", async () => {
+    const request = vi
+      .fn<BrowserHttpClient["request"]>()
+      .mockRejectedValue(new BrowserHttpError("timeout"));
+    const geocoder = new NominatimGeocoder({ httpClient: { request } });
+
+    await expect(
+      geocoder.resolve(
+        { searchQuery: "富士山", country: "日本", region: "静冈县" },
+        [],
+      ),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      message: "地点查询超时，请稍后重试。",
+    });
   });
 });

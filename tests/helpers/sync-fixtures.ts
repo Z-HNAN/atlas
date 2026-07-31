@@ -26,33 +26,29 @@ export class MemorySyncCloud {
 
   createProvider(): SyncProvider<SyncPayload> {
     return {
-      pull: () => Promise.resolve(this.clone(this.snapshot)),
+      pullLatest: () => Promise.resolve(this.clone(this.snapshot)),
       push: (input) => {
-        if (
-          (input.expectedRemoteVersion === null && this.snapshot) ||
-          (input.expectedRemoteVersion !== null &&
-            this.snapshot?.dataVersion !== input.expectedRemoteVersion)
-        ) {
+        const currentVersion = this.snapshot?.version ?? 0;
+        const requestedBase = input.baseVersion ?? 0;
+        if (requestedBase !== currentVersion) {
           throw new AppError("REMOTE_VERSION_MISMATCH", "测试云端版本已变化。");
         }
-
-        const dataVersion =
-          input.expectedRemoteVersion === null
-            ? input.dataVersion
-            : Math.max(input.dataVersion, input.expectedRemoteVersion + 1);
+        if (
+          this.snapshot?.commitId === input.commitId &&
+          this.snapshot.payload === input.payload
+        ) {
+          return Promise.resolve(this.clone(this.snapshot));
+        }
         this.snapshot = {
           appId: "sync-test",
-          schemaVersion: input.schemaVersion,
-          dataVersion,
+          version: currentVersion + 1,
+          commitId: input.commitId,
+          payloadSchemaVersion: input.payloadSchemaVersion,
           payload: structuredClone(input.payload),
           deviceId: input.deviceId,
-          updatedAt: "2026-07-17T08:01:00.000Z",
+          createdAt: "2026-07-17T08:01:00.000Z",
         };
         return Promise.resolve(this.clone(this.snapshot));
-      },
-      remove: () => {
-        this.snapshot = null;
-        return Promise.resolve();
       },
     };
   }

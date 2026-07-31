@@ -1,7 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import AppLayout from "../components/layout/AppLayout";
 import type { CloudSyncController } from "../features/trips/hooks/useCloudSync";
-import type { TripOperationResult } from "../features/trips/hooks/useTrips";
+import type { TripOperation } from "../features/trips/hooks/useTrips";
 import type {
   GeneratedTravelPlan,
   GeocodeCacheEntry,
@@ -27,19 +27,16 @@ interface AppRouterProps {
   envelope: LocalAppEnvelope<TripPayload> | null;
   storageSize: StorageSizeInfo;
   cloudSync: CloudSyncController;
-  onAddTrip: (draft: TripDraft) => TripOperationResult<Trip>;
-  onAddGeneratedTrip: (plan: GeneratedTravelPlan) => TripOperationResult<Trip>;
-  onReplaceTrip: (trip: Trip) => TripOperationResult<Trip>;
-  onRemoveTrip: (id: string) => TripOperationResult;
-  onAddPoint: (
-    tripId: string,
-    nameZh?: string,
-  ) => TripOperationResult<TravelPoint>;
-  onCacheGeocode: (entry: GeocodeCacheEntry) => TripOperationResult;
-  onExportData: () => TripOperationResult<string>;
-  onExportLatestBackup: () => TripOperationResult<string>;
-  onImportData: (raw: string) => TripOperationResult;
-  onResetData: () => TripOperationResult;
+  onAddTrip: (draft: TripDraft) => TripOperation<Trip>;
+  onAddGeneratedTrip: (plan: GeneratedTravelPlan) => TripOperation<Trip>;
+  onReplaceTrip: (trip: Trip) => TripOperation<Trip>;
+  onRemoveTrip: (id: string) => TripOperation;
+  onAddPoint: (tripId: string, nameZh?: string) => TripOperation<TravelPoint>;
+  onCacheGeocode: (entry: GeocodeCacheEntry) => TripOperation;
+  onExportData: () => TripOperation<string>;
+  onExportLatestBackup: () => TripOperation<string>;
+  onImportData: (raw: string) => TripOperation;
+  onResetData: () => TripOperation;
 }
 
 const AppRouter = (props: AppRouterProps) => (

@@ -8,7 +8,7 @@
 
 ### Requirement: 固定开发工具链
 
-项目 SHALL 使用 Vite、React、严格 TypeScript、React Router、Tailwind CSS、Zod、Vitest、ESLint 和 Prettier，并 SHALL 固定 Node.js 22。
+项目 SHALL 使用 Vite、React、严格 TypeScript、React Router、Tailwind CSS、Zod、Dexie、Ky、Vitest、ESLint 和 Prettier，并 SHALL 固定 Node.js 22。
 
 #### Scenario: 本地质量门禁
 
@@ -17,7 +17,7 @@
 
 #### Scenario: 未配置环境变量
 
-- **WHEN** `.env.local` 不存在且未配置 Supabase
+- **WHEN** `.env.local` 不存在且未配置同步 Worker
 - **THEN** 依赖安装、生产构建和纯本地核心功能仍可用
 
 ### Requirement: 持续集成
@@ -64,17 +64,17 @@
 
 ### Requirement: 可选云能力安全边界
 
-Supabase SHALL 是默认关闭的可选增强，且 SHALL NOT 成为应用初始化或本地保存的依赖。
+Cloudflare 快照同步 SHALL 是默认关闭的可选增强，且 SHALL NOT 成为应用初始化或本地保存的依赖。
 
 #### Scenario: 前端环境变量
 
 - **WHEN** 配置任意 `VITE_` 环境变量
-- **THEN** 该变量被视为公开信息，不得包含 secret、service role、数据库密码或其它私密凭证
+- **THEN** 该变量被视为公开信息，不得包含 Access 私钥、R2 密钥、D1 凭证、DeepSeek Key 或其它私密凭证
 
-#### Scenario: RLS 用户隔离
+#### Scenario: Worker 成员隔离
 
-- **WHEN** Phase 2 使用 `app_sync_snapshots`
-- **THEN** authenticated 用户只能通过 RLS 操作 `user_id = auth.uid()` 的快照，未登录用户无权访问
+- **WHEN** 用户访问受 Access 保护的同步 API
+- **THEN** Worker 验证 JWT 与成员关系，非成员不可读取，readonly 成员不可写入
 
 ### Requirement: Codex 与 OpenSpec 协作
 
@@ -88,11 +88,11 @@ Supabase SHALL 是默认关闭的可选增强，且 SHALL NOT 成为应用初始
 #### Scenario: 交付变更
 
 - **WHEN** Codex 声明任务完成
-- **THEN** README、OpenSpec、实现和测试互相一致，四项质量门禁已运行且结果被报告
+- **THEN** README、OpenSpec、实现和测试互相一致，五项质量门禁已运行且结果被报告
 
 ### Requirement: 分层与按需升级
 
-业务代码 SHALL 位于 `features`，跨业务基础设施 SHALL 位于 `lib`；系统 SHALL NOT 在没有明确需求时引入 Serverless、IndexedDB、复杂状态管理、CRDT 或全栈框架。
+业务代码 SHALL 位于 `features`，跨业务基础设施 SHALL 位于 `lib`；IndexedDB、Worker、D1 和 R2 只服务已确认的本地存储与不可变快照需求，系统 SHALL NOT 在没有明确需求时引入复杂状态管理、CRDT、实时协作或业务查询数据库。
 
 #### Scenario: 新增业务能力
 
@@ -102,7 +102,21 @@ Supabase SHALL 是默认关闭的可选增强，且 SHALL NOT 成为应用初始
 #### Scenario: 架构升级
 
 - **WHEN** 数据接近数 MB、需要 Blob/索引、服务端查询、多人协作、密钥保密、CORS 代理、支付、Webhook 或可信计算
-- **THEN** 项目以独立 OpenSpec 评估 IndexedDB、业务表、Serverless 或全栈框架，不污染基础种子
+- **THEN** 项目以独立 OpenSpec 评估索引查询、业务数据库、薄代理、增量同步或全栈框架，不污染当前架构边界
+
+### Requirement: 收益驱动的第三方依赖
+
+项目 SHALL 允许维护活跃、类型完整、许可与安全边界清晰的成熟库承接通用基础能力；引入前 SHALL 评估真实需求、包体积、浏览器兼容、PWA 影响、可测试性、迁移和退出成本。第三方库 SHALL 封装在基础设施适配层之后，业务 Schema、Envelope、版本、备份、冲突和安全契约 SHALL 继续由项目掌控。
+
+#### Scenario: 通用基础设施存在成熟实现
+
+- **WHEN** 原生实现需要维护复杂生命周期、事务、兼容或错误处理，且成熟库能以可接受成本降低错误面
+- **THEN** 项目优先通过基础设施适配层使用该库，并删除重复实现
+
+#### Scenario: 简单能力没有足够引库收益
+
+- **WHEN** 现代浏览器 API 稳定、实现短小且业务边界清晰
+- **THEN** 项目保留原生实现，不为形式上的工程化新增依赖
 
 ## Compatibility
 

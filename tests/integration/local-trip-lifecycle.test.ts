@@ -3,7 +3,7 @@ import { createTripsRepository } from "../../src/features/trips/repository/trips
 import { MemoryStorage } from "../helpers/memory-storage";
 
 describe("本地旅行生命周期", () => {
-  it("离线创建、刷新恢复、导出与重置均保持严格 Envelope", () => {
+  it("离线创建、刷新恢复、导出与重置均保持严格 Envelope", async () => {
     const storage = new MemoryStorage();
     const dependencies = {
       storage,
@@ -12,11 +12,11 @@ describe("本地旅行生命周期", () => {
       createId: () => "device",
     };
     const repository = createTripsRepository(dependencies);
-    const initial = repository.load();
+    const initial = await repository.load();
     expect(initial.payload.trips).toEqual([]);
     expect(initial.sync.dirty).toBe(false);
 
-    const updated = repository.update((payload) => ({
+    const updated = await repository.update((payload) => ({
       ...payload,
       trips: [
         {
@@ -39,13 +39,13 @@ describe("本地旅行生命周期", () => {
     expect(updated.dataVersion).toBe(2);
     expect(updated.sync.dirty).toBe(true);
 
-    const refreshed = createTripsRepository(dependencies).load();
+    const refreshed = await createTripsRepository(dependencies).load();
     expect(refreshed.payload.trips[0]?.title).toBe("本地测试旅行");
-    expect(repository.exportJson()).not.toContain("api-key");
+    expect(await repository.exportJson()).not.toContain("api-key");
 
-    const reset = repository.reset();
+    const reset = await repository.reset();
     expect(reset.dataVersion).toBe(3);
     expect(reset.payload.trips).toEqual([]);
-    expect(repository.getLatestBackupJson()).not.toBeNull();
+    expect(await repository.getLatestBackupJson()).not.toBeNull();
   });
 });

@@ -68,6 +68,7 @@ export const createTripsRepository = (
     appId: APP_CONFIG.appId,
     schemaVersion: APP_CONFIG.schemaVersion,
     storageKey: APP_CONFIG.storageKey,
+    databaseName: APP_CONFIG.databaseName,
     payloadSchema: tripPayloadSchema,
     createDefaultPayload: () => ({
       trips:

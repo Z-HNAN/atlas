@@ -1,30 +1,25 @@
 export interface RemoteSnapshot<TPayload = unknown> {
   appId: string;
-  schemaVersion: number;
-  dataVersion: number;
+  version: number;
+  commitId: string;
+  payloadSchemaVersion: number;
   payload: TPayload;
   deviceId: string | null;
-  updatedAt: string;
+  createdAt: string;
 }
 
 export interface SyncProvider<TPayload> {
-  pull(): Promise<RemoteSnapshot<unknown> | null>;
+  pullLatest(): Promise<RemoteSnapshot<unknown> | null>;
   push(input: {
     payload: TPayload;
-    schemaVersion: number;
-    dataVersion: number;
-    expectedRemoteVersion: number | null;
+    payloadSchemaVersion: number;
+    baseVersion: number | null;
+    commitId: string;
     deviceId: string;
   }): Promise<RemoteSnapshot<unknown>>;
-  remove(): Promise<void>;
 }
 
-export type SyncAction =
-  | "none"
-  | "uploaded"
-  | "downloaded"
-  | "conflict"
-  | "remote-deleted";
+export type SyncAction = "none" | "uploaded" | "downloaded" | "conflict";
 
 export interface SyncConflict<TPayload> {
   localPayload: TPayload;
@@ -36,7 +31,7 @@ export type SyncResult<TPayload> =
   | {
       status: "synced";
       action: Exclude<SyncAction, "conflict">;
-      remoteVersion: number | null;
+      cloudVersion: number | null;
     }
   | {
       status: "conflict";

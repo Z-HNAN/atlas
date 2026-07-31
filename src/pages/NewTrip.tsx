@@ -7,11 +7,11 @@ import type {
   Trip,
   TripDraft,
 } from "../features/trips/types/trips";
-import type { TripOperationResult } from "../features/trips/hooks/useTrips";
+import type { TripOperation } from "../features/trips/hooks/useTrips";
 
 interface NewTripProps {
-  onAddTrip: (draft: TripDraft) => TripOperationResult<Trip>;
-  onAddGeneratedTrip: (plan: GeneratedTravelPlan) => TripOperationResult<Trip>;
+  onAddTrip: (draft: TripDraft) => TripOperation<Trip>;
+  onAddGeneratedTrip: (plan: GeneratedTravelPlan) => TripOperation<Trip>;
 }
 
 const NewTrip = ({ onAddTrip, onAddGeneratedTrip }: NewTripProps) => {
@@ -34,10 +34,15 @@ const NewTrip = ({ onAddTrip, onAddGeneratedTrip }: NewTripProps) => {
     pointCount: 5,
     preferences: "适合低空目视探索，地点顺序自然。",
   });
+  const aiDisabledReason = !planner.hasKey
+    ? "请先在设置页保存 DeepSeek Key，按钮才会启用。"
+    : planner.loading
+      ? "请求正在进行，请等待本次生成完成。"
+      : "";
 
-  const handleManual = (event: FormEvent) => {
+  const handleManual = async (event: FormEvent) => {
     event.preventDefault();
-    const result = onAddTrip(manual);
+    const result = await onAddTrip(manual);
     if (!result.ok) {
       setError(result.error);
       return;
@@ -53,7 +58,7 @@ const NewTrip = ({ onAddTrip, onAddGeneratedTrip }: NewTripProps) => {
       setError(generated.error);
       return;
     }
-    const saved = onAddGeneratedTrip(generated.value);
+    const saved = await onAddGeneratedTrip(generated.value);
     if (!saved.ok) {
       setError(saved.error);
       return;
@@ -182,12 +187,27 @@ const NewTrip = ({ onAddTrip, onAddGeneratedTrip }: NewTripProps) => {
             className="primary-btn wide-btn"
             type="submit"
             disabled={!planner.hasKey || planner.loading}
+            aria-describedby={
+              aiDisabledReason ? "deepseek-generate-disabled-reason" : undefined
+            }
           >
             {planner.loading ? "正在生成旅行计划…" : "让 DeepSeek 规划路线"}
           </button>
+          {aiDisabledReason ? (
+            <p
+              id="deepseek-generate-disabled-reason"
+              className="action-hint"
+              role="status"
+            >
+              {aiDisabledReason}
+            </p>
+          ) : null}
         </form>
       ) : (
-        <form className="form-card" onSubmit={handleManual}>
+        <form
+          className="form-card"
+          onSubmit={(event) => void handleManual(event)}
+        >
           <div className="form-intro">
             <span className="step-number">01</span>
             <div>

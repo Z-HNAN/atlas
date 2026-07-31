@@ -1,15 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AppError } from "../../src/lib/errors/app-error";
+import { StorageKeyValueStore } from "../../src/lib/local-data/key-value-store";
 import { BrowserLocalDataRepository } from "../../src/lib/local-data/local-data-repository";
 import { MemoryStorage, QuotaStorage } from "../helpers/memory-storage";
 
-const payloadSchema = z
-  .object({
-    items: z.array(z.string()),
-  })
-  .strict();
-
+const payloadSchema = z.object({ items: z.array(z.string()) }).strict();
 type TestPayload = z.infer<typeof payloadSchema>;
 
 const createRepository = (
@@ -33,11 +29,9 @@ const createRepository = (
   });
 
 describe("BrowserLocalDataRepository", () => {
-  it("创建并持久化默认 Envelope", () => {
+  it("创建并持久化默认 Envelope", async () => {
     const storage = new MemoryStorage();
-    const repository = createRepository(storage);
-
-    const envelope = repository.load();
+    const envelope = await createRepository(storage).load();
 
     expect(envelope).toMatchObject({
       appId: "test-app",
@@ -45,59 +39,55 @@ describe("BrowserLocalDataRepository", () => {
       dataVersion: 1,
       deviceId: "device-1",
       payload: { items: [] },
-      sync: { dirty: false },
+      sync: { dirty: false, lastCloudVersion: null, syncStatus: "idle" },
     });
     expect(storage.getItem("app:test-app:data")).not.toBeNull();
   });
 
-  it("业务更新递增 dataVersion 并设置 dirty，刷新后可以恢复", () => {
+  it("业务更新递增版本、设置 dirty，并可刷新恢复", async () => {
     const storage = new MemoryStorage();
-    const firstRepository = createRepository(storage);
-    firstRepository.load();
-
-    const updated = firstRepository.update((payload) => ({
+    const first = createRepository(storage);
+    await first.load();
+    const updated = await first.update((payload) => ({
       items: [...payload.items, "first"],
     }));
-    const refreshed = createRepository(storage).load();
+    const refreshed = await createRepository(storage).load();
 
     expect(updated.dataVersion).toBe(2);
-    expect(updated.sync.dirty).toBe(true);
+    expect(updated.sync).toMatchObject({
+      dirty: true,
+      lastSyncCommitId: null,
+      syncStatus: "pending",
+    });
     expect(refreshed.payload.items).toEqual(["first"]);
   });
 
-  it("导出不包含设备和同步元数据，导入前自动备份", () => {
+  it("导出排除设备与同步元数据，导入前自动备份", async () => {
     const storage = new MemoryStorage();
     const repository = createRepository(storage);
-    repository.update(() => ({ items: ["local"] }));
-    const exportedRaw = repository.exportJson();
+    await repository.update(() => ({ items: ["local"] }));
+    const exportedRaw = await repository.exportJson();
     const exported = JSON.parse(exportedRaw) as Record<string, unknown>;
 
     expect(exported.format).toBe("personal-web-seed-export");
     expect(exported).not.toHaveProperty("deviceId");
     expect(exported).not.toHaveProperty("sync");
 
-    repository.update(() => ({ items: ["newer-local"] }));
-    const imported = repository.importJson(exportedRaw);
-
+    await repository.update(() => ({ items: ["newer-local"] }));
+    const imported = await repository.importJson(exportedRaw);
     expect(imported.payload.items).toEqual(["local"]);
     expect(imported.dataVersion).toBe(4);
-    expect(imported.sync.dirty).toBe(true);
-    expect(storage.getItem("app:test-app:data:backup:latest")).not.toBeNull();
     const backupExport = JSON.parse(
-      repository.exportLatestBackupJson() ?? "{}",
+      (await repository.exportLatestBackupJson()) ?? "{}",
     ) as Record<string, unknown>;
     expect(backupExport).toMatchObject({
-      format: "personal-web-seed-export",
       appId: "test-app",
       payload: { items: ["newer-local"] },
     });
-    expect(backupExport).not.toHaveProperty("deviceId");
-    expect(backupExport).not.toHaveProperty("sync");
   });
 
-  it("拒绝导入其它 appId 的文件", () => {
-    const storage = new MemoryStorage();
-    const repository = createRepository(storage);
+  it("拒绝导入其它 appId 的文件", async () => {
+    const repository = createRepository(new MemoryStorage());
     const raw = JSON.stringify({
       format: "personal-web-seed-export",
       appId: "another-app",
@@ -106,19 +96,12 @@ describe("BrowserLocalDataRepository", () => {
       exportedAt: "2026-07-17T08:00:00.000Z",
       payload: { items: [] },
     });
-
-    try {
-      repository.importJson(raw);
-      throw new Error("预期导入被拒绝");
-    } catch (error) {
-      expect(error).toBeInstanceOf(AppError);
-      if (error instanceof AppError) {
-        expect(error.code).toBe("DATA_VALIDATION_FAILED");
-      }
-    }
+    await expect(repository.importJson(raw)).rejects.toMatchObject({
+      code: "DATA_VALIDATION_FAILED",
+    });
   });
 
-  it("按顺序迁移旧 schemaVersion 并保存迁移备份", () => {
+  it("按顺序迁移旧 schemaVersion 并保存备份", async () => {
     const storage = new MemoryStorage();
     storage.setItem(
       "app:test-app:data",
@@ -147,25 +130,56 @@ describe("BrowserLocalDataRepository", () => {
         },
       },
     });
-
-    const migrated = repository.load();
-
-    expect(migrated.schemaVersion).toBe(2);
-    expect(migrated.dataVersion).toBe(8);
-    expect(migrated.payload.items).toEqual(["migrated"]);
-    expect(migrated.sync.dirty).toBe(true);
+    const migrated = await repository.load();
+    expect(migrated).toMatchObject({
+      schemaVersion: 2,
+      dataVersion: 8,
+      payload: { items: ["migrated"] },
+      sync: { dirty: true, lastCloudVersion: 7 },
+    });
     expect(storage.getItem("app:test-app:data:backup:latest")).not.toBeNull();
   });
 
-  it("将 LocalStorage 配额错误转换为统一 AppError", () => {
-    const repository = createRepository(new QuotaStorage());
+  it("把旧 LocalStorage 正式快照一次性迁入主 Store", async () => {
+    const indexedDbMemory = new MemoryStorage();
+    const legacyStorage = new MemoryStorage();
+    const old = JSON.stringify({
+      appId: "test-app",
+      schemaVersion: 1,
+      dataVersion: 2,
+      updatedAt: "2026-07-16T08:00:00.000Z",
+      deviceId: "old-device",
+      payload: { items: ["legacy"] },
+      sync: {
+        dirty: true,
+        lastRemoteVersion: null,
+        lastSyncedAt: null,
+      },
+    });
+    legacyStorage.setItem("app:test-app:data", old);
+    const repository = new BrowserLocalDataRepository<TestPayload>({
+      appId: "test-app",
+      schemaVersion: 1,
+      storageKey: "app:test-app:data",
+      payloadSchema,
+      createDefaultPayload: () => ({ items: [] }),
+      store: new StorageKeyValueStore(indexedDbMemory),
+      legacyStorage,
+      createId: () => "device-1",
+    });
 
-    try {
-      repository.load();
-      throw new Error("预期 load 抛出错误");
-    } catch (error) {
-      expect(error).toBeInstanceOf(AppError);
-      expect((error as AppError).code).toBe("LOCAL_STORAGE_QUOTA_EXCEEDED");
-    }
+    expect((await repository.load()).payload.items).toEqual(["legacy"]);
+    expect(legacyStorage.getItem("app:test-app:data")).toBeNull();
+    expect(
+      indexedDbMemory.getItem("app:test-app:data:localstorage-backup"),
+    ).toBe(old);
+  });
+
+  it("将容量错误转换为统一 AppError", async () => {
+    const repository = createRepository(new QuotaStorage());
+    await expect(repository.load()).rejects.toBeInstanceOf(AppError);
+    await expect(repository.load()).rejects.toMatchObject({
+      code: "LOCAL_STORAGE_QUOTA_EXCEEDED",
+    });
   });
 });

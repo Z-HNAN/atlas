@@ -32,3 +32,5 @@ logs/
 .cache/
 .temp/
 coverage/
+worker/wrangler.toml
+.wrangler/

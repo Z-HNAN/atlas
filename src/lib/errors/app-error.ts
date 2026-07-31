@@ -26,6 +26,13 @@ export class AppError extends Error {
 }
 
 export const isQuotaExceededError = (error: unknown) => {
+  if (
+    error instanceof Error &&
+    (error.name === "QuotaExceededError" ||
+      error.name === "NS_ERROR_DOM_QUOTA_REACHED")
+  ) {
+    return true;
+  }
   if (!(error instanceof DOMException)) return false;
 
   return (

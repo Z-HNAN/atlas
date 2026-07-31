@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { APP_CONFIG } from "../../../config/app-config";
 import { AppError } from "../../../lib/errors/app-error";
+import {
+  BrowserHttpError,
+  KyBrowserHttpClient,
+  isBrowserOnline,
+  type BrowserHttpClient,
+} from "../../../lib/http/browser-http-client";
 import type { GeocodeCacheEntry, TravelPoint } from "../types/trips";
 
 const nominatimResultSchema = z
@@ -54,8 +60,9 @@ export type GeocodeResolution =
   | { status: "failed" };
 
 interface GeocoderDependencies {
-  fetch?: typeof fetch;
+  httpClient?: BrowserHttpClient;
   now?: () => Date;
+  timeoutMs?: number;
 }
 
 const normalize = (value: string) =>
@@ -88,12 +95,14 @@ const scoreResult = (
 };
 
 export class NominatimGeocoder {
-  private readonly request: typeof fetch;
+  private readonly httpClient: BrowserHttpClient;
   private readonly now: () => Date;
+  private readonly timeoutMs: number;
 
   constructor(dependencies: GeocoderDependencies = {}) {
-    this.request = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
+    this.httpClient = dependencies.httpClient ?? new KyBrowserHttpClient();
     this.now = dependencies.now ?? (() => new Date());
+    this.timeoutMs = dependencies.timeoutMs ?? 15_000;
   }
 
   async resolve(
@@ -112,7 +121,7 @@ export class NominatimGeocoder {
         cacheEntry: cached,
       };
     }
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    if (!isBrowserOnline()) {
       throw new AppError("OFFLINE", "当前离线，无法查询地点坐标。");
     }
 
@@ -128,19 +137,37 @@ export class NominatimGeocoder {
 
     let response: Response;
     try {
-      response = await this.request(
+      response = await this.httpClient.request(
         `${APP_CONFIG.nominatimBaseUrl}/search?${params.toString()}`,
         {
           headers: { Accept: "application/json" },
           signal,
+          timeoutMs: this.timeoutMs,
         },
       );
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError")
+      if (
+        error instanceof BrowserHttpError &&
+        error.kind === "aborted" &&
+        signal?.aborted
+      ) {
         throw error;
+      }
+      if (!isBrowserOnline()) {
+        throw new AppError("OFFLINE", "当前离线，无法查询地点坐标。", error);
+      }
+      if (error instanceof BrowserHttpError && error.kind === "timeout") {
+        throw new AppError(
+          "NETWORK_ERROR",
+          "地点查询超时，请稍后重试。",
+          error,
+        );
+      }
       throw new AppError(
         "NETWORK_ERROR",
-        "地点查询失败，请检查网络后重试。",
+        error instanceof BrowserHttpError && error.kind === "network"
+          ? "地点查询未收到 HTTP 响应，请检查网络、代理、浏览器扩展或 API 地址。"
+          : "地点查询在发送前失败，请刷新页面后重试。",
         error,
       );
     }

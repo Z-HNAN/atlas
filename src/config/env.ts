@@ -15,7 +15,7 @@ const optionalPublicUrlSchema = z
   .refine(
     (value) => value === "" || z.string().url().safeParse(value).success,
     {
-      message: "Supabase URL 格式不正确。",
+      message: "公开 URL 格式不正确。",
     },
   );
 
@@ -26,8 +26,7 @@ const environmentSchema = z
       .enum(["true", "false"])
       .optional()
       .default("false"),
-    VITE_SUPABASE_URL: optionalPublicUrlSchema.optional().default(""),
-    VITE_SUPABASE_PUBLISHABLE_KEY: z.string().trim().optional().default(""),
+    VITE_SYNC_API_BASE_URL: optionalPublicUrlSchema.optional().default(""),
     VITE_DEEPSEEK_MODEL: z
       .string()
       .trim()
@@ -45,6 +44,4 @@ const environmentSchema = z
 
 export const ENV = environmentSchema.parse(import.meta.env);
 
-export const isSupabaseConfigured = Boolean(
-  ENV.VITE_SUPABASE_URL && ENV.VITE_SUPABASE_PUBLISHABLE_KEY,
-);
+export const isCloudSyncConfigured = Boolean(ENV.VITE_SYNC_API_BASE_URL);

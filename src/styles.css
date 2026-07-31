@@ -627,6 +627,14 @@
     gap: 1rem;
   }
 
+  .action-hint {
+    margin: -0.35rem 0 0;
+    color: #687772;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    text-align: center;
+  }
+
   .form-intro {
     display: flex;
     gap: 1rem;

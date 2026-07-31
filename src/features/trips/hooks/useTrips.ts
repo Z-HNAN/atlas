@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppError, toAppError } from "../../../lib/errors/app-error";
 import type { LocalAppEnvelope } from "../../../lib/local-data/envelope";
 import type { StorageSizeInfo } from "../../../lib/local-data/storage-size";
@@ -21,22 +21,18 @@ export type TripOperationResult<T = undefined> =
   | { ok: true; value: T }
   | { ok: false; error: string };
 
+export type TripOperation<T = undefined> = Promise<TripOperationResult<T>>;
+
 interface TripsState {
   envelope: LocalAppEnvelope<TripPayload> | null;
+  storageSize: StorageSizeInfo;
   error: AppError | null;
 }
 
-const readInitialState = (
-  repository: ReturnType<typeof createTripsRepository>,
-): TripsState => {
-  try {
-    return { envelope: repository.load(), error: null };
-  } catch (error) {
-    return {
-      envelope: null,
-      error: toAppError(error, "本地旅行数据加载失败。"),
-    };
-  }
+const EMPTY_SIZE: StorageSizeInfo = {
+  bytes: 0,
+  formatted: "0 B",
+  level: "normal",
 };
 
 const createPoint = (
@@ -95,9 +91,30 @@ export const useTrips = () => {
   );
   repositoryRef.current ??= createTripsRepository();
   const repository = repositoryRef.current;
-  const [state, setState] = useState<TripsState>(() =>
-    readInitialState(repository),
-  );
+  const [state, setState] = useState<TripsState>({
+    envelope: null,
+    storageSize: EMPTY_SIZE,
+    error: null,
+  });
+
+  const reload = useCallback(async () => {
+    try {
+      const [envelope, storageSize] = await Promise.all([
+        repository.load(),
+        repository.getStorageSize(),
+      ]);
+      setState({ envelope, storageSize, error: null });
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: toAppError(error, "本地旅行数据加载失败。"),
+      }));
+    }
+  }, [repository]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
   const setFailure = useCallback((error: unknown, fallback: string) => {
     const appError = toAppError(error, fallback);
@@ -106,23 +123,27 @@ export const useTrips = () => {
   }, []);
 
   const commit = useCallback(
-    <T>(
-      action: () => { envelope: LocalAppEnvelope<TripPayload>; value: T },
+    async <T>(
+      action: () => Promise<{
+        envelope: LocalAppEnvelope<TripPayload>;
+        value: T;
+      }>,
       fallback: string,
-    ): TripOperationResult<T> => {
+    ): TripOperation<T> => {
       try {
-        const { envelope, value } = action();
-        setState({ envelope, error: null });
+        const { envelope, value } = await action();
+        const storageSize = await repository.getStorageSize();
+        setState({ envelope, storageSize, error: null });
         return { ok: true, value };
       } catch (error) {
         return setFailure(error, fallback);
       }
     },
-    [setFailure],
+    [repository, setFailure],
   );
 
   const addTrip = useCallback(
-    (draft: TripDraft) => {
+    async (draft: TripDraft) => {
       const parsed = tripDraftSchema.safeParse(draft);
       if (!parsed.success) {
         return setFailure(
@@ -130,9 +151,9 @@ export const useTrips = () => {
           parsed.error.issues[0]?.message ?? "旅行信息无效。",
         );
       }
-      return commit(() => {
+      return commit(async () => {
         const trip = createTrip(parsed.data, new Date().toISOString());
-        const envelope = repository.update((payload) => ({
+        const envelope = await repository.update((payload) => ({
           ...payload,
           trips: [trip, ...payload.trips],
         }));
@@ -143,12 +164,12 @@ export const useTrips = () => {
   );
 
   const addGeneratedTrip = useCallback(
-    (plan: GeneratedTravelPlan) => {
+    async (plan: GeneratedTravelPlan) => {
       const parsed = generatedTravelPlanSchema.safeParse(plan);
       if (!parsed.success) {
         return setFailure(parsed.error, "AI 旅行计划格式不正确。");
       }
-      return commit(() => {
+      return commit(async () => {
         const timestamp = new Date().toISOString();
         const points = [...parsed.data.points]
           .sort((a, b) => a.order - b.order)
@@ -163,7 +184,7 @@ export const useTrips = () => {
           timestamp,
           points,
         );
-        const envelope = repository.update((payload) => ({
+        const envelope = await repository.update((payload) => ({
           ...payload,
           trips: [trip, ...payload.trips],
         }));
@@ -174,7 +195,7 @@ export const useTrips = () => {
   );
 
   const replaceTrip = useCallback(
-    (candidate: Trip) => {
+    async (candidate: Trip) => {
       const parsed = tripSchema.safeParse(candidate);
       if (!parsed.success) {
         return setFailure(
@@ -182,17 +203,18 @@ export const useTrips = () => {
           parsed.error.issues[0]?.message ?? "旅行数据校验失败。",
         );
       }
-      return commit(() => {
-        const current = repository.load();
-        if (!current.payload.trips.some((trip) => trip.id === parsed.data.id)) {
-          throw new AppError("DATA_VALIDATION_FAILED", "该旅行已不存在。");
-        }
-        const envelope = repository.update((payload) => ({
-          ...payload,
-          trips: payload.trips.map((trip) =>
-            trip.id === parsed.data.id ? parsed.data : trip,
-          ),
-        }));
+      return commit(async () => {
+        const envelope = await repository.update((payload) => {
+          if (!payload.trips.some((trip) => trip.id === parsed.data.id)) {
+            throw new AppError("DATA_VALIDATION_FAILED", "该旅行已不存在。");
+          }
+          return {
+            ...payload,
+            trips: payload.trips.map((trip) =>
+              trip.id === parsed.data.id ? parsed.data : trip,
+            ),
+          };
+        });
         return { envelope, value: parsed.data };
       }, "旅行保存失败。");
     },
@@ -201,15 +223,16 @@ export const useTrips = () => {
 
   const removeTrip = useCallback(
     (id: string) =>
-      commit(() => {
-        const current = repository.load();
-        if (!current.payload.trips.some((trip) => trip.id === id)) {
-          throw new AppError("DATA_VALIDATION_FAILED", "该旅行已不存在。");
-        }
-        const envelope = repository.update((payload) => ({
-          ...payload,
-          trips: payload.trips.filter((trip) => trip.id !== id),
-        }));
+      commit(async () => {
+        const envelope = await repository.update((payload) => {
+          if (!payload.trips.some((trip) => trip.id === id)) {
+            throw new AppError("DATA_VALIDATION_FAILED", "该旅行已不存在。");
+          }
+          return {
+            ...payload,
+            trips: payload.trips.filter((trip) => trip.id !== id),
+          };
+        });
         return { envelope, value: undefined };
       }, "旅行删除失败。"),
     [commit, repository],
@@ -217,10 +240,10 @@ export const useTrips = () => {
 
   const addPoint = useCallback(
     (tripId: string, nameZh = "新地点") =>
-      commit(() => {
+      commit(async () => {
         const timestamp = new Date().toISOString();
         let created: TravelPoint | null = null;
-        const envelope = repository.update((payload) => ({
+        const envelope = await repository.update((payload) => ({
           ...payload,
           trips: payload.trips.map((trip) => {
             if (trip.id !== tripId) return trip;
@@ -249,8 +272,8 @@ export const useTrips = () => {
 
   const cacheGeocode = useCallback(
     (entry: GeocodeCacheEntry) =>
-      commit(() => {
-        const envelope = repository.update((payload) => ({
+      commit(async () => {
+        const envelope = await repository.update((payload) => ({
           ...payload,
           geocodeCache: [
             entry,
@@ -267,32 +290,38 @@ export const useTrips = () => {
   const importData = useCallback(
     (raw: string) =>
       commit(
-        () => ({
-          envelope: repository.importJson(raw),
+        async () => ({
+          envelope: await repository.importJson(raw),
           value: undefined,
         }),
         "旅行数据导入失败。",
       ),
     [commit, repository],
   );
+
   const resetData = useCallback(
     () =>
       commit(
-        () => ({ envelope: repository.reset(), value: undefined }),
+        async () => ({
+          envelope: await repository.reset(),
+          value: undefined,
+        }),
         "本地旅行数据清空失败。",
       ),
     [commit, repository],
   );
-  const exportData = useCallback((): TripOperationResult<string> => {
+
+  const exportData = useCallback(async (): TripOperation<string> => {
     try {
-      return { ok: true, value: repository.exportJson() };
+      return { ok: true, value: await repository.exportJson() };
     } catch (error) {
       return setFailure(error, "旅行数据导出失败。");
     }
   }, [repository, setFailure]);
-  const exportLatestBackup = useCallback((): TripOperationResult<string> => {
+
+  const exportLatestBackup = useCallback(async (): TripOperation<string> => {
     try {
-      const backup = repository.exportLatestBackupJson();
+      const backup = await repository.exportLatestBackupJson();
       if (!backup) {
         throw new AppError(
           "DATA_VALIDATION_FAILED",
@@ -304,30 +333,17 @@ export const useTrips = () => {
       return setFailure(error, "最近本地备份导出失败。");
     }
   }, [repository, setFailure]);
-  const reload = useCallback(() => {
-    setState(readInitialState(repository));
-  }, [repository]);
+
   const dismissError = useCallback(() => {
     setState((current) => ({ ...current, error: null }));
   }, []);
-
-  let storageSize: StorageSizeInfo = {
-    bytes: 0,
-    formatted: "0 B",
-    level: "normal",
-  };
-  try {
-    storageSize = repository.getStorageSize();
-  } catch {
-    // 主错误状态提供恢复入口，容量读取失败不覆盖更具体的错误。
-  }
 
   return {
     repository,
     trips: state.envelope?.payload.trips ?? [],
     geocodeCache: state.envelope?.payload.geocodeCache ?? [],
     envelope: state.envelope,
-    storageSize,
+    storageSize: state.storageSize,
     error: state.error,
     addTrip,
     addGeneratedTrip,

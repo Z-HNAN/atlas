@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import CloudSyncSettings from "../components/settings/CloudSyncSettings";
 import { APP_CONFIG } from "../config/app-config";
 import type { CloudSyncController } from "../features/trips/hooks/useCloudSync";
-import type { TripOperationResult } from "../features/trips/hooks/useTrips";
+import type { TripOperation } from "../features/trips/hooks/useTrips";
 import { useTravelPlanner } from "../features/trips/hooks/useTravelPlanner";
 import type { TripPayload } from "../features/trips/types/trips";
 import { downloadJson } from "../lib/local-data/download";
@@ -14,10 +14,10 @@ interface SettingsProps {
   envelope: LocalAppEnvelope<TripPayload> | null;
   storageSize: StorageSizeInfo;
   cloudSync: CloudSyncController;
-  onExportData: () => TripOperationResult<string>;
-  onExportLatestBackup: () => TripOperationResult<string>;
-  onImportData: (raw: string) => TripOperationResult;
-  onResetData: () => TripOperationResult;
+  onExportData: () => TripOperation<string>;
+  onExportLatestBackup: () => TripOperation<string>;
+  onImportData: (raw: string) => TripOperation;
+  onResetData: () => TripOperation;
 }
 
 const Settings = ({
@@ -36,8 +36,8 @@ const Settings = ({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const exportData = () => {
-    const result = onExportData();
+  const exportData = async () => {
+    const result = await onExportData();
     if (!result.ok) {
       setError(result.error);
       return;
@@ -50,8 +50,8 @@ const Settings = ({
     setError("");
   };
 
-  const exportBackup = () => {
-    const result = onExportLatestBackup();
+  const exportBackup = async () => {
+    const result = await onExportLatestBackup();
     if (!result.ok) {
       setError(result.error);
       return;
@@ -67,7 +67,7 @@ const Settings = ({
     )
       return;
     try {
-      const result = onImportData(await file.text());
+      const result = await onImportData(await file.text());
       if (!result.ok) setError(result.error);
       else {
         setMessage("旅行数据导入成功。");
@@ -93,7 +93,7 @@ const Settings = ({
         <div>
           <p className="eyebrow">SETTINGS & DATA</p>
           <h1>设置与数据</h1>
-          <p>管理浏览器中的 Key、本地备份和可选 Supabase 云同步。</p>
+          <p>管理浏览器中的 Key、IndexedDB 本地备份和可选云同步。</p>
         </div>
         <Link className="ghost-btn" to="/">
           返回首页
@@ -106,7 +106,7 @@ const Settings = ({
           <p className="settings-note">
             API Key
             默认只保存到本次浏览器会话。只有你主动勾选后才会持久保存在此浏览器；Key
-            不进入旅行数据、导出文件、Supabase 或日志。
+            不进入旅行数据、导出文件、云端快照或日志。
           </p>
           <p className="settings-note">
             当前浏览器直连地址：<code>{APP_CONFIG.deepSeekBaseUrl}</code>
@@ -204,13 +204,17 @@ const Settings = ({
             {capacityText}
           </p>
           <div className="data-actions">
-            <button className="primary-btn" type="button" onClick={exportData}>
+            <button
+              className="primary-btn"
+              type="button"
+              onClick={() => void exportData()}
+            >
               导出 JSON
             </button>
             <button
               className="secondary-btn"
               type="button"
-              onClick={exportBackup}
+              onClick={() => void exportBackup()}
             >
               导出最近备份
             </button>
@@ -230,16 +234,20 @@ const Settings = ({
               className="danger-btn"
               type="button"
               onClick={() => {
-                if (
-                  !window.confirm("确认清空全部本地旅行吗？清空前会自动备份。")
-                )
-                  return;
-                const result = onResetData();
-                if (!result.ok) setError(result.error);
-                else {
-                  setMessage("本地数据已重置为初始示例。");
-                  setError("");
-                }
+                void (async () => {
+                  if (
+                    !window.confirm(
+                      "确认清空全部本地旅行吗？清空前会自动备份。",
+                    )
+                  )
+                    return;
+                  const result = await onResetData();
+                  if (!result.ok) setError(result.error);
+                  else {
+                    setMessage("本地数据已重置为初始示例。");
+                    setError("");
+                  }
+                })();
               }}
             >
               重置本地数据

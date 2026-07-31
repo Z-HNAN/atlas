@@ -43,7 +43,7 @@ const AppContent = () => {
         <DataErrorBanner
           error={tripsState.error}
           onDismiss={tripsState.dismissError}
-          onRetry={tripsState.reload}
+          onRetry={() => void tripsState.reload()}
         />
       ) : null}
       <AppRouter

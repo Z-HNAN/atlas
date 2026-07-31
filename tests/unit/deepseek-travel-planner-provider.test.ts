@@ -4,6 +4,10 @@ import {
   parseGeneratedTravelPlan,
 } from "../../src/features/trips/providers/deepseek-travel-planner-provider";
 import { AppError } from "../../src/lib/errors/app-error";
+import {
+  BrowserHttpError,
+  type BrowserHttpClient,
+} from "../../src/lib/http/browser-http-client";
 
 const validPlan = {
   title: "富士山湖海路线",
@@ -56,7 +60,7 @@ describe("DeepSeekTravelPlannerProvider", () => {
 
   it("第一次结果非法时修复重试一次", async () => {
     const request = vi
-      .fn<typeof fetch>()
+      .fn<BrowserHttpClient["request"]>()
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -74,7 +78,7 @@ describe("DeepSeekTravelPlannerProvider", () => {
         ),
       );
     const provider = new DeepSeekTravelPlannerProvider({
-      fetch: request,
+      httpClient: { request },
       wait: () => Promise.resolve(),
     });
 
@@ -131,7 +135,11 @@ describe("DeepSeekTravelPlannerProvider", () => {
 
   it("网络层 TypeError 不武断归因为 CORS", async () => {
     const provider = new DeepSeekTravelPlannerProvider({
-      fetch: vi.fn<typeof fetch>().mockRejectedValue(new TypeError("failed")),
+      httpClient: {
+        request: vi
+          .fn<BrowserHttpClient["request"]>()
+          .mockRejectedValue(new BrowserHttpError("network")),
+      },
     });
 
     const caught: unknown = await provider
@@ -154,10 +162,10 @@ describe("DeepSeekTravelPlannerProvider", () => {
     [500, "NETWORK_ERROR", "服务暂时不可用"],
   ])("将 HTTP %i 映射为脱敏错误", async (status, code, message) => {
     const request = vi
-      .fn<typeof fetch>()
+      .fn<BrowserHttpClient["request"]>()
       .mockResolvedValue(new Response("third-party detail", { status }));
     const provider = new DeepSeekTravelPlannerProvider({
-      fetch: request,
+      httpClient: { request },
       wait: () => Promise.resolve(),
     });
 
