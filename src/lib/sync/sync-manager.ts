@@ -81,16 +81,6 @@ export class SyncManager<TPayload> {
     return this.synced("downloaded", remote.version);
   }
 
-  async submitLocalVersion(): Promise<SyncResult<TPayload>> {
-    const remoteRaw = await this.options.provider.pullLatest();
-    const remote = remoteRaw
-      ? await this.options.repository.prepareRemoteSnapshot(remoteRaw)
-      : null;
-    if (remote) await this.options.repository.backupRemoteSnapshot(remote);
-    await this.options.repository.createBackup();
-    return this.pushLocal(remote?.version ?? null);
-  }
-
   async resolveWithLocal(): Promise<SyncResult<TPayload>> {
     if (!this.conflict) {
       throw new AppError("SYNC_CONFLICT", "当前没有需要处理的同步冲突。");

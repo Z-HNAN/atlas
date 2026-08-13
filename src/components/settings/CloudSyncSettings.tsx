@@ -1,15 +1,17 @@
 import { APP_CONFIG } from "../../config/app-config";
-import type { CloudSyncController } from "../../features/trips/hooks/useCloudSync";
-import type { TripPayload } from "../../features/trips/types/trips";
 import { downloadJson } from "../../lib/local-data/download";
 import type { LocalAppEnvelope } from "../../lib/local-data/envelope";
+import type {
+  CloudSyncController,
+  CloudSyncStatus,
+} from "../../lib/sync/use-cloud-sync";
 
-interface CloudSyncSettingsProps {
-  controller: CloudSyncController;
-  envelope: LocalAppEnvelope<TripPayload> | null;
+interface CloudSyncSettingsProps<TPayload> {
+  controller: CloudSyncController<TPayload>;
+  envelope: LocalAppEnvelope<TPayload> | null;
 }
 
-const statusText: Record<CloudSyncController["status"], string> = {
+const statusText: Record<CloudSyncStatus, string> = {
   disabled: "未启用",
   "config-required": "等待配置",
   "signed-out": "未登录",
@@ -22,10 +24,10 @@ const statusText: Record<CloudSyncController["status"], string> = {
   error: "同步失败",
 };
 
-const CloudSyncSettings = ({
+const CloudSyncSettings = <TPayload,>({
   controller,
   envelope,
-}: CloudSyncSettingsProps) => {
+}: CloudSyncSettingsProps<TPayload>) => {
   const busy = ["checking", "syncing"].includes(controller.status);
 
   if (!controller.enabled) {
@@ -34,8 +36,8 @@ const CloudSyncSettings = ({
         <h2 className="settings-section-title">可选云同步</h2>
         <p className="settings-note">
           当前为纯本地模式，功能完整可用。需要跨设备备份时，将
-          <code> VITE_ENABLE_CLOUD_SYNC </code>设为 true，并配置同步 Worker
-          地址。
+          <code> VITE_ENABLE_CLOUD_SYNC </code>设为 true，并配置 Gipsy
+          已部署的共享同步 API；Atlas 不需要另建 Worker。
         </p>
       </div>
     );
@@ -72,8 +74,10 @@ const CloudSyncSettings = ({
       {!controller.authenticated ? (
         <div className="form-grid">
           <p className="settings-note">
-            云端使用 Cloudflare Access 固定团队登录。未登录时应用继续只保存到
-            IndexedDB。
+            云端使用 Cloudflare Access 登录。未登录时应用继续只保存到
+            IndexedDB。登录完成后请返回本页并检查登录状态；隐私窗口或严格防跟踪
+            可能拦截同步域名的跨站 Cookie，需要允许
+            <code> sync.api.10242020.xyz </code>及 Access 团队域名的 Cookie。
           </p>
           <div className="form-actions">
             <button
@@ -115,14 +119,10 @@ const CloudSyncSettings = ({
             </div>
           </dl>
 
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={controller.autoSync}
-              onChange={(event) => controller.setAutoSync(event.target.checked)}
-            />
-            本地修改后自动同步（3 秒防抖）
-          </label>
+          <p className="settings-note">
+            云端只保存当前账号的最新 Atlas 快照，不会随本地编辑自动上传。
+            请在需要跨设备备份或恢复时手动同步；重要节点建议同时导出 JSON。
+          </p>
 
           {controller.conflict ? (
             <div className="conflict-panel" role="alert">
@@ -140,7 +140,7 @@ const CloudSyncSettings = ({
                   onClick={() => {
                     if (
                       window.confirm(
-                        "确认保留本地并提交新的云端版本吗？旧版本仍按保留策略保存。",
+                        "确认保留本地并覆盖云端最新快照吗？系统会先把当前云端数据保存为本地恢复备份。",
                       )
                     ) {
                       void controller.resolveWithLocal();
@@ -198,20 +198,6 @@ const CloudSyncSettings = ({
                 }}
               >
                 从云端恢复
-              </button>
-              <button
-                className="secondary-btn"
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  if (
-                    window.confirm("确认将当前本地数据提交为新的云端版本吗？")
-                  ) {
-                    void controller.submitLocalVersion();
-                  }
-                }}
-              >
-                提交本地新版本
               </button>
             </div>
           )}

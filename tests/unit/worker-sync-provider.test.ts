@@ -10,6 +10,37 @@ import type { BrowserHttpClient } from "../../src/lib/http/browser-http-client";
 const COMMIT_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("WorkerSyncProvider", () => {
+  it("身份检查与登录 URL 都携带 Atlas appId", async () => {
+    const request = vi.fn<BrowserHttpClient["request"]>(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            user: { id: "a".repeat(64), email: "owner@example.com" },
+            apps: [{ id: "atlas-travel", name: "Atlas", role: "admin" }],
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    const provider = new WorkerSyncProvider({
+      appId: "atlas-travel",
+      apiBaseUrl: "https://sync.example.com",
+      httpClient: { request },
+    });
+
+    expect(provider.loginUrl).toBe(
+      "https://sync.example.com/api/v1/me?appId=atlas-travel",
+    );
+    await expect(provider.getCurrentUser()).resolves.toMatchObject({
+      user: { id: "a".repeat(64) },
+      apps: [{ id: "atlas-travel" }],
+    });
+    expect(request).toHaveBeenCalledWith(
+      "https://sync.example.com/api/v1/me?appId=atlas-travel",
+      expect.any(Object),
+    );
+  });
+
   it("上传 gzip 字节、完整性摘要和独立云版本 Header", async () => {
     const request = vi.fn<BrowserHttpClient["request"]>(
       async (_input, init) => {
@@ -131,36 +162,5 @@ describe("WorkerSyncProvider", () => {
         deviceId: "device-a",
       }),
     ).rejects.toMatchObject({ code: "REMOTE_VERSION_MISMATCH" });
-  });
-
-  it("把 422 映射为 Payload Schema 迁移错误", async () => {
-    const provider = new WorkerSyncProvider({
-      appId: "atlas-travel",
-      apiBaseUrl: "https://sync.example.com",
-      httpClient: {
-        request: () =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify({
-                error: {
-                  code: "PAYLOAD_SCHEMA_VERSION_MISMATCH",
-                  message: "请升级客户端。",
-                },
-              }),
-              { status: 422 },
-            ),
-          ),
-      },
-    });
-
-    await expect(
-      provider.push({
-        payload: { trips: [] },
-        payloadSchemaVersion: 1,
-        baseVersion: 0,
-        commitId: COMMIT_ID,
-        deviceId: "device-a",
-      }),
-    ).rejects.toMatchObject({ code: "DATA_MIGRATION_FAILED" });
   });
 });

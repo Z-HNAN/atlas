@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AppError } from "../../src/lib/errors/app-error";
-import { StorageKeyValueStore } from "../../src/lib/local-data/key-value-store";
 import { BrowserLocalDataRepository } from "../../src/lib/local-data/local-data-repository";
 import { MemoryStorage, QuotaStorage } from "../helpers/memory-storage";
 
@@ -138,41 +137,6 @@ describe("BrowserLocalDataRepository", () => {
       sync: { dirty: true, lastCloudVersion: 7 },
     });
     expect(storage.getItem("app:test-app:data:backup:latest")).not.toBeNull();
-  });
-
-  it("把旧 LocalStorage 正式快照一次性迁入主 Store", async () => {
-    const indexedDbMemory = new MemoryStorage();
-    const legacyStorage = new MemoryStorage();
-    const old = JSON.stringify({
-      appId: "test-app",
-      schemaVersion: 1,
-      dataVersion: 2,
-      updatedAt: "2026-07-16T08:00:00.000Z",
-      deviceId: "old-device",
-      payload: { items: ["legacy"] },
-      sync: {
-        dirty: true,
-        lastRemoteVersion: null,
-        lastSyncedAt: null,
-      },
-    });
-    legacyStorage.setItem("app:test-app:data", old);
-    const repository = new BrowserLocalDataRepository<TestPayload>({
-      appId: "test-app",
-      schemaVersion: 1,
-      storageKey: "app:test-app:data",
-      payloadSchema,
-      createDefaultPayload: () => ({ items: [] }),
-      store: new StorageKeyValueStore(indexedDbMemory),
-      legacyStorage,
-      createId: () => "device-1",
-    });
-
-    expect((await repository.load()).payload.items).toEqual(["legacy"]);
-    expect(legacyStorage.getItem("app:test-app:data")).toBeNull();
-    expect(
-      indexedDbMemory.getItem("app:test-app:data:localstorage-backup"),
-    ).toBe(old);
   });
 
   it("将容量错误转换为统一 AppError", async () => {

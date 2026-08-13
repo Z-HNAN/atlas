@@ -27,7 +27,7 @@
 #### Scenario: CI 验证
 
 - **WHEN** GitHub Actions 运行 CI
-- **THEN** 工作流依次执行 `npm ci`、typecheck、lint、test 和 build，任一步失败都会阻止 verify job 成功
+- **THEN** 工作流依次执行 `npm ci`、typecheck、lint、test、format:check 和 build，任一步失败都会阻止 verify job 成功
 
 ### Requirement: PWA 与离线应用壳
 
@@ -64,17 +64,17 @@
 
 ### Requirement: 可选云能力安全边界
 
-Cloudflare 快照同步 SHALL 是默认关闭的可选增强，且 SHALL NOT 成为应用初始化或本地保存的依赖。
+Gipsy 共享云备份 SHALL 是默认关闭、仅手动触发的可选增强，且 SHALL NOT 成为应用初始化或本地保存的依赖。
 
 #### Scenario: 前端环境变量
 
 - **WHEN** 配置任意 `VITE_` 环境变量
-- **THEN** 该变量被视为公开信息，不得包含 Access 私钥、R2 密钥、D1 凭证、DeepSeek Key 或其它私密凭证
+- **THEN** 该变量被视为公开信息，不得包含 Access 私钥、R2 凭证、DeepSeek Key 或其它私密凭证
 
-#### Scenario: Worker 成员隔离
+#### Scenario: 共享 Worker 用户隔离
 
 - **WHEN** 用户访问受 Access 保护的同步 API
-- **THEN** Worker 验证 JWT 与成员关系，非成员不可读取，readonly 成员不可写入
+- **THEN** 共享 Worker 验证 JWT、Origin/appId 和匿名用户标识，不同用户与 App 不可读取彼此 Head
 
 ### Requirement: Codex 与 OpenSpec 协作
 
@@ -92,12 +92,12 @@ Cloudflare 快照同步 SHALL 是默认关闭的可选增强，且 SHALL NOT 成
 
 ### Requirement: 分层与按需升级
 
-业务代码 SHALL 位于 `features`，跨业务基础设施 SHALL 位于 `lib`；IndexedDB、Worker、D1 和 R2 只服务已确认的本地存储与不可变快照需求，系统 SHALL NOT 在没有明确需求时引入复杂状态管理、CRDT、实时协作或业务查询数据库。
+业务代码 SHALL 位于 `features`，跨业务基础设施 SHALL 位于 `lib`；IndexedDB 服务本地正式数据，共享 Worker/R2 只服务已确认的最新快照需求，Atlas SHALL NOT 自建 D1 或同步服务，也 SHALL NOT 在没有明确需求时引入复杂状态管理、CRDT、实时协作或业务查询数据库。
 
 #### Scenario: 新增业务能力
 
 - **WHEN** 派生项目实现新的业务功能
-- **THEN** 项目替换 appId、storageKey、Payload 类型、Zod Schema、迁移和业务 Feature，并复用经过验证的通用基础设施
+- **THEN** 项目沿现有 appId、storageKey、Payload 类型、Zod Schema、迁移和旅行 Feature 边界扩展，并复用经过验证的通用基础设施
 
 #### Scenario: 架构升级
 

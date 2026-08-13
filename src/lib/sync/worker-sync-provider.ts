@@ -24,7 +24,7 @@ interface WorkerSyncProviderOptions {
 
 const readJson = async (response: Response): Promise<unknown> => {
   try {
-    return (await response.json()) as unknown;
+    return await response.json();
   } catch {
     return null;
   }
@@ -40,8 +40,6 @@ const toApiError = async (response: Response) => {
     return new AppError("PERMISSION_DENIED", message);
   if (response.status === 409)
     return new AppError("REMOTE_VERSION_MISMATCH", message);
-  if (response.status === 422)
-    return new AppError("DATA_MIGRATION_FAILED", message);
   if (response.status === 429) return new AppError("RATE_LIMITED", message);
   return new AppError("NETWORK_ERROR", message);
 };
@@ -58,11 +56,13 @@ export class WorkerSyncProvider<TPayload> implements SyncProvider<TPayload> {
   }
 
   get loginUrl() {
-    return `${this.options.apiBaseUrl}/api/v1/me`;
+    return `${this.options.apiBaseUrl}/api/v1/me?appId=${encodeURIComponent(this.options.appId)}`;
   }
 
   async getCurrentUser() {
-    const response = await this.request("/api/v1/me");
+    const response = await this.request(
+      `/api/v1/me?appId=${encodeURIComponent(this.options.appId)}`,
+    );
     if (!response.ok) throw await toApiError(response);
     const parsed = syncMeResponseSchema.safeParse(await readJson(response));
     if (!parsed.success) {
@@ -193,7 +193,7 @@ export class WorkerSyncProvider<TPayload> implements SyncProvider<TPayload> {
         online
           ? timeout
             ? "同步服务请求超时，请稍后重试。"
-            : "未能连接同步服务，请检查网络、Access 登录或 API 地址。"
+            : "未能连接同步服务，请检查网络、Access 登录、同步 API 地址，以及浏览器是否拦截同步域名的跨站 Cookie。"
           : "当前离线，本地功能仍可继续使用。",
         error,
       );

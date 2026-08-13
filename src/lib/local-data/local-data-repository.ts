@@ -47,11 +47,6 @@ export interface LocalDataRepository<TPayload> {
   exportSnapshotJson(remote: RemoteSnapshot<unknown>): Promise<string>;
 }
 
-interface LegacyStorageOptions<TPayload> {
-  key: string;
-  parse: (raw: string) => TPayload;
-}
-
 export interface LocalRepositoryOptions<TPayload> {
   appId: string;
   schemaVersion: number;
@@ -60,10 +55,8 @@ export interface LocalRepositoryOptions<TPayload> {
   payloadSchema: z.ZodType<TPayload>;
   createDefaultPayload: () => TPayload;
   migrations?: Readonly<Record<number, SchemaMigration>>;
-  legacy?: LegacyStorageOptions<TPayload>;
   store?: AsyncKeyValueStore;
   storage?: Storage;
-  legacyStorage?: Storage;
   now?: () => Date;
   createId?: () => string;
 }
@@ -92,7 +85,6 @@ export class BrowserLocalDataRepository<TPayload>
   implements LocalDataRepository<TPayload>
 {
   private readonly store: AsyncKeyValueStore;
-  private readonly legacyStorage: Storage | null;
   private readonly now: () => Date;
   private readonly createId: () => string;
   private readonly migrations: Readonly<Record<number, SchemaMigration>>;
@@ -108,10 +100,6 @@ export class BrowserLocalDataRepository<TPayload>
         : new DexieKeyValueStore(
             options.databaseName ?? `${options.appId}-local`,
           ));
-    this.legacyStorage =
-      options.legacyStorage ??
-      options.storage ??
-      (typeof window === "undefined" ? null : window.localStorage);
     this.now = options.now ?? (() => new Date());
     this.createId = options.createId ?? (() => crypto.randomUUID());
     this.migrations = options.migrations ?? {};
@@ -414,32 +402,8 @@ export class BrowserLocalDataRepository<TPayload>
   }
 
   private async initialize(): Promise<LocalAppEnvelope<TPayload>> {
-    const oldEnvelopeRaw = this.readLegacy(this.options.storageKey);
-    if (oldEnvelopeRaw) {
-      await this.store.set(this.indexedDbMigrationBackupKey, oldEnvelopeRaw);
-      const migrated = await this.parseStoredEnvelope(oldEnvelopeRaw, false);
-      await this.save(migrated);
-      this.removeLegacy(this.options.storageKey);
-      return migrated;
-    }
-
-    const legacyRaw = this.options.legacy
-      ? this.readLegacy(this.options.legacy.key)
-      : null;
-    if (legacyRaw && this.options.legacy) {
-      const payload = this.validatePayload(
-        this.options.legacy.parse(legacyRaw),
-      );
-      const migrated = this.createInitialEnvelope(payload, true);
-      await this.store.set(this.legacyBackupKey, legacyRaw);
-      await this.save(migrated);
-      this.removeLegacy(this.options.legacy.key);
-      return migrated;
-    }
-
     const initial = this.createInitialEnvelope(
       this.validatePayload(this.options.createDefaultPayload()),
-      false,
     );
     await this.save(initial);
     return initial;
@@ -496,10 +460,7 @@ export class BrowserLocalDataRepository<TPayload>
     return envelope;
   }
 
-  private createInitialEnvelope(
-    payload: TPayload,
-    dirty: boolean,
-  ): LocalAppEnvelope<TPayload> {
+  private createInitialEnvelope(payload: TPayload): LocalAppEnvelope<TPayload> {
     return {
       appId: this.options.appId,
       schemaVersion: this.options.schemaVersion,
@@ -508,11 +469,11 @@ export class BrowserLocalDataRepository<TPayload>
       deviceId: this.createId(),
       payload,
       sync: {
-        dirty,
+        dirty: false,
         lastCloudVersion: null,
         lastSyncAt: null,
         lastSyncCommitId: null,
-        syncStatus: dirty ? "pending" : "idle",
+        syncStatus: "idle",
       },
     };
   }
@@ -579,42 +540,8 @@ export class BrowserLocalDataRepository<TPayload>
     return pending;
   }
 
-  private readLegacy(key: string) {
-    if (!this.legacyStorage) return null;
-    try {
-      return this.legacyStorage.getItem(key);
-    } catch (error) {
-      throw new AppError(
-        "UNKNOWN",
-        "读取旧 LocalStorage 数据失败，请检查浏览器隐私设置。",
-        error,
-      );
-    }
-  }
-
-  private removeLegacy(key: string) {
-    if (!this.legacyStorage) return;
-    try {
-      this.legacyStorage.removeItem(key);
-    } catch (error) {
-      throw new AppError(
-        "UNKNOWN",
-        "旧数据已迁移，但无法清理旧 LocalStorage 键。",
-        error,
-      );
-    }
-  }
-
   private get backupKey() {
     return `${this.options.storageKey}:backup:latest`;
-  }
-
-  private get legacyBackupKey() {
-    return `${this.options.storageKey}:legacy-backup`;
-  }
-
-  private get indexedDbMigrationBackupKey() {
-    return `${this.options.storageKey}:localstorage-backup`;
   }
 
   private get remoteBackupKey() {

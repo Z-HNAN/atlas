@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import DataErrorBanner from "../components/feedback/DataErrorBanner";
 import NetworkStatusBanner from "../components/feedback/NetworkStatusBanner";
-import { useCloudSync } from "../features/trips/hooks/useCloudSync";
 import { useTrips } from "../features/trips/hooks/useTrips";
+import type { TripPayload } from "../features/trips/types/trips";
 import { applyPwaUpdate } from "../lib/pwa";
+import { useCloudSync } from "../lib/sync/use-cloud-sync";
 import AppProviders from "./providers";
 import AppRouter from "./router";
+
+const isTripPayloadEmpty = (payload: TripPayload) => payload.trips.length === 0;
 
 const AppContent = () => {
   const tripsState = useTrips();
   const cloudSync = useCloudSync({
     repository: tripsState.repository,
-    localDataVersion: tripsState.envelope?.dataVersion ?? null,
-    localDirty: tripsState.envelope?.sync.dirty ?? false,
+    isPayloadEmpty: isTripPayloadEmpty,
     onLocalChange: tripsState.reload,
   });
   const [isUpdateReady, setIsUpdateReady] = useState(false);

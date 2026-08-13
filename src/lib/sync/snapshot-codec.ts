@@ -10,14 +10,18 @@ export interface SnapshotEnvelope<TPayload> {
   data: TPayload;
 }
 
-const transformStream = async (
+export const transformBytes = async (
   bytes: Uint8Array,
-  stream: CompressionStream | DecompressionStream,
+  stream: {
+    readable: ReadableStream<Uint8Array>;
+    writable: WritableStream<Uint8Array>;
+  },
 ) => {
+  const output = new Response(stream.readable).arrayBuffer();
   const writer = stream.writable.getWriter();
   await writer.write(bytes);
   await writer.close();
-  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  return new Uint8Array(await output);
 };
 
 export const gzipSnapshot = async <TPayload>(
@@ -31,7 +35,7 @@ export const gzipSnapshot = async <TPayload>(
   }
   const valid = snapshotEnvelopeSchema.parse(envelope);
   const bytes = new TextEncoder().encode(JSON.stringify(valid));
-  return transformStream(bytes, new CompressionStream("gzip"));
+  return transformBytes(bytes, new CompressionStream("gzip"));
 };
 
 export const gunzipSnapshot = async (bytes: Uint8Array) => {
@@ -42,7 +46,7 @@ export const gunzipSnapshot = async (bytes: Uint8Array) => {
     );
   }
   try {
-    const decoded = await transformStream(
+    const decoded = await transformBytes(
       bytes,
       new DecompressionStream("gzip"),
     );

@@ -12,7 +12,7 @@
 
 #### Scenario: 首次初始化
 
-- **WHEN** IndexedDB 正式记录不存在且没有可迁移旧数据
+- **WHEN** IndexedDB 正式记录不存在
 - **THEN** 系统创建 schemaVersion 1、dataVersion 1、dirty false 的有效 Envelope，并包含可删除的富士山示例路线
 
 #### Scenario: 存储记录类型无效
@@ -25,19 +25,14 @@
 - **WHEN** 用户修改旅行、地点、到访、评分、缓存或导入数据
 - **THEN** Repository 先校验 Payload，再递增 dataVersion、更新 updatedAt、设置 dirty true 和 syncStatus pending，并清空上一提交 ID
 
-### Requirement: 旧 LocalStorage 一次性迁移
+### Requirement: LocalStorage 业务隔离
 
-LocalStorage SHALL NOT 继续作为正式业务数据存储；它只可作为旧正式记录迁移源、设备偏好或 BYOK 持久化存储。
+LocalStorage SHALL NOT 保存、迁移或备份正式业务快照；Repository 首次初始化 SHALL 直接创建 IndexedDB Envelope，且 SHALL NOT 读取或删除残留旧业务键。LocalStorage 只可由 ApiKeyStore 保存用户明确选择持久化的 BYOK Key。
 
-#### Scenario: 迁移旧 Atlas 快照
+#### Scenario: 浏览器残留旧正式键
 
-- **WHEN** IndexedDB 为空且旧 `app:atlas-travel:data` 存在
-- **THEN** Repository 在 IndexedDB 保存原始迁移备份，校验和迁移 Payload，写入正式记录后才删除旧键
-
-#### Scenario: 迁移失败
-
-- **WHEN** 旧数据无法读取、校验、迁移或写入
-- **THEN** 系统返回明确错误，保留旧正式键且不得创建损坏的新正式记录
+- **WHEN** IndexedDB 为空且 LocalStorage 仍存在旧 `app:atlas-travel:data`
+- **THEN** 新版本忽略且不删除该键，并在 IndexedDB 创建当前默认 Envelope
 
 ### Requirement: 异步持久化与并发顺序
 
@@ -83,5 +78,6 @@ API Key、Access JWT 和设备偏好 SHALL NOT 进入 TripPayload、云快照或
 ## Compatibility
 
 - 旧 Todo 数据位于其它 appId，Atlas 不解释、不覆盖、不删除。
+- 仍只有旧 LocalStorage 正式数据的开发环境应先用旧版本导出 JSON，再由当前版本导入；新版本不自动读取或清理旧键。
 - Payload 变化必须递增 schemaVersion、提供顺序迁移并在迁移前备份。
 - 旧同步字段 `lastRemoteVersion` 和 `lastSyncedAt` 只在读取兼容层转换为当前字段，不再写回。

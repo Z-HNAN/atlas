@@ -130,31 +130,6 @@ describe("SyncManager 决策矩阵", () => {
     expect((await repository.load()).sync.syncStatus).toBe("conflict");
   });
 
-  it("人工保留本地时提交新版本且保存远端备份", async () => {
-    const cloud = new MemorySyncCloud();
-    const repository = createSyncRepository("device-a");
-    const manager = createManager(repository, cloud);
-    await repository.update(() => ({ items: ["baseline"] }));
-    await manager.sync();
-    cloud.snapshot = {
-      appId: "sync-test",
-      version: 3,
-      commitId: "00000000-0000-4000-8000-777777777777",
-      payloadSchemaVersion: 1,
-      payload: { items: ["remote-before-submit"] },
-      deviceId: "device-b",
-      createdAt: "2026-07-17T08:03:00.000Z",
-    };
-    await repository.update(() => ({ items: ["local-wins"] }));
-
-    await manager.submitLocalVersion();
-    expect(cloud.snapshot?.version).toBe(4);
-    expect(cloud.snapshot?.payload.items).toEqual(["local-wins"]);
-    expect(
-      JSON.parse((await repository.getLatestRemoteBackupJson()) ?? "{}"),
-    ).toMatchObject({ payload: { items: ["remote-before-submit"] } });
-  });
-
   it("上传期间的新本地修改保持 dirty，不被旧响应误标为已同步", async () => {
     const repository = createSyncRepository("device-a");
     await repository.update(() => ({ items: ["uploading"] }));

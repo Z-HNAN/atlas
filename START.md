@@ -1,8 +1,21 @@
-# Atlas 本地开发、同步服务与 Codex 指南
+# Atlas 本地开发、共享云备份与 Codex 指南
 
-Atlas 默认是由 Dexie 驱动 IndexedDB 的本地优先应用。Vercel 只承载前端；可选同步服务由 Cloudflare Access、Worker、D1 和私有 R2 组成。本文只准备本地可交付版本，不执行线上发布。
+Atlas 是 Local-first 的 AI 虚拟旅行收藏地图。IndexedDB 是正式业务数据主存储；DeepSeek、Nominatim 和 Gipsy 共享云备份都是可选网络增强。Atlas 静态前端部署到 Vercel，不创建或部署 Cloudflare 服务端资源。
 
-## 1. 前端启动
+正式地址约定：
+
+- Atlas：`https://atlas-travel.app.10242020.xyz`
+- 共享同步 API：`https://sync.api.10242020.xyz`
+
+## 0. 先理解边界
+
+- 离线、未登录、未配置 Key、未开启云备份或共享 Worker 故障时，手工旅行、地图、记录、导入导出和 PLN 仍可完整使用。
+- 云备份默认关闭，且只在用户点击“立即同步”“从云端恢复”或处理冲突时访问服务端。
+- 每个 `atlas-travel + Access 用户` 只保存一个最新 Head，不提供云端历史、自动后台同步、字段合并或多人共享同一 Payload。
+- Atlas 只复用 Gipsy 已部署的 Worker、私有 R2 和 Access Application；本仓库不含 Worker、D1 migration、Wrangler 配置或服务端凭证。
+- Atlas 正式 Origin 必须与 appId `atlas-travel` 一致。
+
+## 1. 本地启动
 
 要求 Node.js 22，以及支持 IndexedDB、CompressionStream、sessionStorage 和 Service Worker 的现代浏览器。
 
@@ -24,17 +37,18 @@ VITE_DEEPSEEK_MODEL=deepseek-v4-pro
 VITE_NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org
 ```
 
-修改环境变量后重启 Vite。
+修改环境变量后需要重启 Vite。
 
-## 2. 本地数据与旧版迁移
+## 2. 本地数据与恢复
 
 - 正式数据：Dexie 适配的 IndexedDB `atlas-travel-local` / `records`。
 - 正式记录键：`app:atlas-travel:data`。
-- LocalStorage：只保留 API Key 持久化选择、同步偏好和旧版迁移源。
-- 旧 LocalStorage 正式记录：校验后迁入 IndexedDB，并保存 `:localstorage-backup`。
+- LocalStorage：只允许保存用户明确选择持久化的 DeepSeek Key。
+- 全新安装：IndexedDB 为空时直接创建 schemaVersion 1、dataVersion 1 的默认 Envelope。
+- 旧 LocalStorage 业务键：新版本不读取、不删除。若某个开发环境仍只有旧数据，先用旧版本导出 JSON，再在新版本导入。
 - Schema 迁移、导入、清空和云端覆盖前都先备份；失败不删除原数据。
 
-设置页可以导出标准 JSON、下载最近本地备份、导入同一 appId 的可迁移文件和确认后重置。导出不包含 deviceId、同步状态、认证或 Key。
+设置页可以导出标准 JSON、下载最近本地备份、导入同一 appId 的可迁移文件和确认后重置。标准导出不包含 deviceId、同步状态、认证或 Key。
 
 ## 3. DeepSeek BYOK 与地点查询
 
@@ -45,143 +59,78 @@ VITE_NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org
 5. 在旅行详情点击“查询全部未确认地点”，逐项检查 Nominatim 结果。
 6. 全部坐标确认后才确认旅行或导出 PLN。
 
-DeepSeek、Nominatim 和同步 Worker 统一通过 `BrowserHttpClient` 请求，底层由 Ky 管理超时并正确调用浏览器原生 `fetch`。若点击后 Network 完全没有请求，先查看按钮旁的禁用原因，再检查表单校验和控制台；这表示代码在发包前停止，不是已发送请求后的 CORS 结论。若提示“未收到 HTTP 响应”，可能来自 DNS、TLS、代理、扩展、网络策略、错误 API 地址或真实 CORS，仅凭浏览器 `TypeError` 无法区分。
+DeepSeek、Nominatim 和共享 Worker 统一通过 `BrowserHttpClient` 请求。若点击后 Network 完全没有请求，先查看按钮禁用原因、表单校验和控制台；若提示“未收到 HTTP 响应”，可能来自 DNS、TLS、代理、扩展、网络策略、错误 API 地址或真实 CORS，仅凭浏览器 `TypeError` 无法区分。
 
 DeepSeek Key 不进入 Payload、云快照、导出、URL 或日志。Nominatim 批量查询严格串行，相邻请求至少约 1.1 秒，公共实例仅用于个人低频场景。
 
-## 4. 本地准备 Cloudflare 同步服务
+## 4. 手动云备份如何工作
 
-### 4.1 Wrangler 配置
+共享 API 前缀为 `/api/v1`：
 
-```bash
-cp worker/wrangler.toml.example worker/wrangler.toml
-```
+- `GET /me?appId=atlas-travel`：检查 Access 身份。
+- `GET /apps/atlas-travel/sync/head`：读取最新 Head 元数据。
+- `PUT /apps/atlas-travel/sync`：提交新的 Head。
+- `GET /apps/atlas-travel/sync/latest`：下载最新快照。
 
-`worker/wrangler.toml` 不提交。填写：
+上传流程：
 
-- `ACCESS_ISSUER`：例如 `https://your-team.cloudflareaccess.com`。
-- `ACCESS_AUD`：Access Application 的 AUD。
-- `ALLOWED_ORIGINS`：逗号分隔的本地与 Vercel Origin，不允许 `*`。
-- D1 `database_id` 和私有 R2 bucket 名称。
+1. 客户端把 Envelope 序列化为 JSON、gzip，并对最终字节计算 SHA-256。
+2. 客户端携带 `baseVersion`、唯一 `commitId`、Payload Schema 版本和设备 ID。
+3. 共享 Worker 校验 Origin、Access JWT、Header、大小和 Hash。
+4. Worker 用 R2 ETag 条件写覆盖该用户的 Atlas Head；版本从 1 开始并单调递增。
+5. 相同 commitId 与 Hash 的重试保持幂等；baseVersion 过期或竞争时返回 409。
+6. 客户端遇到双侧修改时要求用户选择保留本地、使用云端、分别导出或取消。
 
-不得把 Access Secret、R2 Token 或 D1 凭证写入任何 `VITE_` 变量。
+云端只保留最新 Head。选择云端覆盖本地前会保存本地备份；选择本地覆盖云端前会保存当前远端备份。云端 Head 被覆盖后无法从服务端找回旧版本，重要节点请手工导出 JSON。
 
-### 4.2 本地 D1 迁移和成员
+## 5. 启用 Gipsy 共享云备份
 
-```bash
-npx wrangler d1 migrations apply DB \
-  --local \
-  --config worker/wrangler.toml
-```
-
-固定团队首版不开放注册。应在 D1 预配置 `users`、`apps` 和 `app_memberships`：
-
-```sql
-INSERT INTO users (id, access_sub, email, status, created_at, updated_at)
-VALUES (
-  '替换为内部用户 UUID',
-  NULL,
-  'you@example.com',
-  'active',
-  '2026-07-30T00:00:00.000Z',
-  '2026-07-30T00:00:00.000Z'
-);
-
-INSERT INTO apps (
-  id, name, current_payload_schema_version, created_at, updated_at
-)
-VALUES (
-  'atlas-travel',
-  'Atlas',
-  1,
-  '2026-07-30T00:00:00.000Z',
-  '2026-07-30T00:00:00.000Z'
-);
-
-INSERT INTO app_memberships (app_id, user_id, role, created_at)
-VALUES (
-  'atlas-travel',
-  '替换为内部用户 UUID',
-  'admin',
-  '2026-07-30T00:00:00.000Z'
-);
-```
-
-首次有效 Access 请求先按 `access_sub` 匹配；找不到时按规范化邮箱匹配 active 用户并更新 sub，不会创建公开用户。
-
-### 4.3 启动 Worker
-
-```bash
-npm run worker:dev
-```
-
-Cloudflare Access 通常需要可访问域名才能完成真实登录；本地 Wrangler 主要用于接口、D1/R2 和 CORS 调试。前端启用同步：
+Atlas 不需要注册 appId，也不需要运行任何 Cloudflare 命令。正式 Vercel 环境只设置：
 
 ```env
+VITE_APP_ID=atlas-travel
 VITE_ENABLE_CLOUD_SYNC=true
-VITE_SYNC_API_BASE_URL=https://your-sync-worker.example.com
+VITE_SYNC_API_BASE_URL=https://sync.api.10242020.xyz
 ```
 
-## 5. 同步协议
+前提是用户邮箱已在共享 Cloudflare Access Application 的允许策略内。进入设置页点击“打开 Access 登录”，完成后返回并点击“检查登录状态”。隐私窗口或严格防跟踪可能拦截跨站 Cookie；失败时允许 `sync.api.10242020.xyz` 和 Access 团队域名的 Cookie。
 
-API 前缀为 `/api/v1`：
+所有 `VITE_` 变量都是公开信息，不得放 Access 私钥、R2 凭证、DeepSeek Key 或其它 Secret。同步失败不会修改或删除 IndexedDB 本地数据。
 
-- `GET /me`
-- `GET /apps/:appId/sync/head`
-- `PUT /apps/:appId/sync`
-- `GET /apps/:appId/sync/latest`
-- `GET /apps/:appId/sync/versions`
-- `GET /apps/:appId/sync/versions/:version`
+## 6. Vercel 前端发布
 
-客户端将快照 Envelope JSON 转为 UTF-8 和 gzip，对最终字节计算 SHA-256，并携带 `baseVersion`、UUID `commitId`、Payload Schema 版本和设备 ID 上传。Worker 校验 Access JWT、用户、成员关系、Header、大小与 Hash，先条件写 R2，再用 D1 条件 INSERT 提交元数据。
+`vercel.json` 已配置 Vite 构建、`dist` 输出和 SPA 回退：
 
-云端 `version`、Payload `schemaVersion` 和本地 `dataVersion` 是三个独立概念。相同 commitId 与相同 Hash 重试返回原提交；相同 commitId 配不同 Hash 返回 409。
+1. 在 Vercel 使用 Node.js 22。
+2. 设置 `VITE_APP_ID=atlas-travel` 和按需的共享云备份公开变量。
+3. 绑定 `atlas-travel.app.10242020.xyz` 并完成 DNS。
+4. 不在前端环境变量中存放 Secret。
+5. 发布后验证 `/`、`/settings`、`/trips/new`、`/manifest.webmanifest`、`/sw.js`、深链刷新、离线重开、IndexedDB 写入、导入导出和覆盖前备份。
+6. 开启云备份时，再验证 Access 登录、手动上传、另一浏览器恢复和双端冲突。
 
-R2 键由服务端生成：
+本仓库不执行共享 Worker 发布。Worker、Access、R2、Origin 策略和线上回滚由 Gipsy 基础设施维护者在 Gipsy 仓库负责。
 
-```text
-v1/apps/{app_id}/users/{user_id}/snapshots/{10位补零version}-{commit_id}.bin
-```
+## 7. 容量与何时升级
 
-默认保留最近 50 个版本；定时任务先删 R2 再软删除 D1 元数据，并清理 24 小时前的孤儿对象，最新版本不删除。
+共享方案面向 1～2 人、低频手动 JSON 备份。单个压缩快照保护上限由共享 Worker 控制；日常 Payload 最好保持在几 MiB 以内。图片、视频和大量附件不应放进旅行 JSON。
 
-## 6. Vercel 前端发布准备
+出现以下真实需求时再单独立项：
 
-仓库 `vercel.json` 已配置 Vite 构建、`dist` 输出和 SPA 路由回退。之后自行发布时：
-
-1. 使用 Node 22。
-2. 设置 `VITE_APP_ID=atlas-travel`。
-3. 纯本地部署保持 `VITE_ENABLE_CLOUD_SYNC=false`。
-4. 启用同步时填写公开的 `VITE_SYNC_API_BASE_URL`。
-5. 把正式 Vercel Origin 加入 Worker `ALLOWED_ORIGINS` 和 Cloudflare Access Application。
-6. 不在 Vercel 前端变量中放任何服务端 Secret。
-
-发布后验证 `/`、`/settings`、`/trips/new`、深链刷新、离线重开和 IndexedDB 写入。启用同步时再验证 Access、双设备冲突、历史版本和跨用户隔离。
-
-## 7. Cloudflare 手动发布准备
-
-本文不执行发布。上线时由维护者运行：
-
-```bash
-npx wrangler d1 migrations apply DB \
-  --remote \
-  --config worker/wrangler.toml
-npx wrangler deploy --config worker/wrangler.toml
-```
-
-发布前确认 R2 私有、Access 覆盖 Worker 域名、CORS 仅允许明确 Origin、readonly 成员不能上传、日志不含 JWT/快照 Body/Key，并启用定时保留和孤儿清理。
+- 需要找回多个云端历史版本：增加保留策略或版本对象。
+- 需要业务查询、成员关系或审计：评估 D1/Postgres 元数据。
+- 需要多人编辑同一数据：重新设计身份、冲突与协作模型。
+- 需要自动后台同步：设计节流、生命周期、网络和错误恢复。
+- 需要图片、音视频或大附件：拆分 Blob/R2 资源。
 
 ## 8. Codex + OpenSpec
 
-先让 Codex 阅读 `agents.md`、`START.md`、相关主规范、测试和 `git diff`。
+先让 Codex 阅读 `AGENTS.md`、本文件、相关主规范、测试和 `git diff`，并说明风险等级。
 
-- S 级：文案、样式、局部 Bug，直接修改并补回归测试。
+- S 级：文案、样式、局部 Bug，直接修改并补相称回归测试。
 - M 级：新交互、业务规则、Provider 行为，至少建立 `tasks.md` 和能力增量规范。
-- L 级：存储、同步、认证、部署、安全或破坏性清理，必须建立 proposal、design、tasks 和能力规范。
+- L 级：存储、同步、认证、安全、部署或破坏性清理，必须建立 proposal、design、tasks 和能力规范。
 
-通用能力不要求一律原生实现。遇到 IndexedDB、日期、表单等成熟问题时，先评估维护活跃且类型完整的库；只有收益覆盖包体积、兼容、安全和迁移成本时才引入，并通过 `lib` 适配层隔离。稳定浏览器 API、少量明确代码和核心业务协议继续保留项目实现。
-
-开发中变更位于 `openspec/changes/YYYY-MM-DD-topic/`，完成实现、主规范同步和质量门禁后，再移动到 `openspec/changes/archive/`。MVP 验收后删除不再解释当前行为的 Seed 历史、旧厂商配置和失效代码。
+开发中变更位于 `openspec/changes/YYYY-MM-DD-topic/`；实现、主规范和门禁一致后才移动到 `archive/`。旧归档保留当时决策记录，当前行为以主规范、代码、测试和本指南为准。
 
 ## 9. 质量门禁
 
@@ -193,4 +142,4 @@ npm run format:check
 npm run build
 ```
 
-`typecheck` 同时校验前端、构建配置和 Worker。未使用真实 Cloudflare 凭证时，交付报告必须明确 Access、远程 D1/R2 和线上 CORS 尚未做端到端验证。
+`typecheck` 校验前端、测试与构建配置。交付还必须执行 OpenSpec strict 校验。未使用真实 Access 会话时，报告应明确共享 Worker、线上 CORS、R2 上传下载和 Vercel 页面尚未做端到端验证。

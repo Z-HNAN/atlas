@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { APP_CONFIG } from "../../../config/app-config";
-import { isCloudSyncConfigured } from "../../../config/env";
-import { toAppError } from "../../../lib/errors/app-error";
-import type { LocalDataRepository } from "../../../lib/local-data/local-data-repository";
-import { shouldAutoSync } from "../../../lib/sync/auto-sync";
-import { BrowserSyncPreferencesStore } from "../../../lib/sync/sync-preferences";
-import { SyncManager } from "../../../lib/sync/sync-manager";
-import type {
-  ConflictExports,
-  SyncConflict,
-  SyncResult,
-} from "../../../lib/sync/types";
-import { WorkerSyncProvider } from "../../../lib/sync/worker-sync-provider";
-import type { TripPayload } from "../types/trips";
+import { APP_CONFIG } from "../../config/app-config";
+import { isCloudSyncConfigured } from "../../config/env";
+import { toAppError } from "../errors/app-error";
+import type { LocalDataRepository } from "../local-data/local-data-repository";
+import { SyncManager } from "./sync-manager";
+import type { ConflictExports, SyncConflict, SyncResult } from "./types";
+import { WorkerSyncProvider } from "./worker-sync-provider";
 
 export type CloudSyncStatus =
   | "disabled"
@@ -26,10 +19,9 @@ export type CloudSyncStatus =
   | "offline"
   | "error";
 
-interface UseCloudSyncOptions {
-  repository: LocalDataRepository<TripPayload>;
-  localDataVersion: number | null;
-  localDirty: boolean;
+interface UseCloudSyncOptions<TPayload> {
+  repository: LocalDataRepository<TPayload>;
+  isPayloadEmpty: (payload: TPayload) => boolean;
   onLocalChange: () => void | Promise<void>;
 }
 
@@ -39,17 +31,14 @@ const initialStatus = (): CloudSyncStatus => {
   return "checking";
 };
 
-export const useCloudSync = ({
+export const useCloudSync = <TPayload>({
   repository,
-  localDataVersion,
-  localDirty,
+  isPayloadEmpty,
   onLocalChange,
-}: UseCloudSyncOptions) => {
-  const preferencesRef = useRef<BrowserSyncPreferencesStore | null>(null);
-  preferencesRef.current ??= new BrowserSyncPreferencesStore(APP_CONFIG.appId);
-  const providerRef = useRef<WorkerSyncProvider<TripPayload> | null>(null);
-  const managerRef = useRef<SyncManager<TripPayload> | null>(null);
-  const operationRef = useRef<Promise<SyncResult<TripPayload> | null> | null>(
+}: UseCloudSyncOptions<TPayload>) => {
+  const providerRef = useRef<WorkerSyncProvider<TPayload> | null>(null);
+  const managerRef = useRef<SyncManager<TPayload> | null>(null);
+  const operationRef = useRef<Promise<SyncResult<TPayload> | null> | null>(
     null,
   );
   const [authenticated, setAuthenticated] = useState(false);
@@ -57,19 +46,10 @@ export const useCloudSync = ({
   const [status, setStatus] = useState<CloudSyncStatus>(initialStatus);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [conflict, setConflict] = useState<SyncConflict<TripPayload> | null>(
-    null,
-  );
-  const [autoSync, setAutoSyncState] = useState(() => {
-    try {
-      return preferencesRef.current?.load().autoSync ?? false;
-    } catch {
-      return false;
-    }
-  });
+  const [conflict, setConflict] = useState<SyncConflict<TPayload> | null>(null);
 
   const getProvider = useCallback(() => {
-    providerRef.current ??= new WorkerSyncProvider<TripPayload>({
+    providerRef.current ??= new WorkerSyncProvider<TPayload>({
       appId: APP_CONFIG.appId,
       apiBaseUrl: APP_CONFIG.syncApiBaseUrl,
     });
@@ -80,13 +60,13 @@ export const useCloudSync = ({
     managerRef.current ??= new SyncManager({
       repository,
       provider: getProvider(),
-      isPayloadEmpty: (payload: TripPayload) => payload.trips.length === 0,
+      isPayloadEmpty,
     });
     return managerRef.current;
-  }, [getProvider, repository]);
+  }, [getProvider, isPayloadEmpty, repository]);
 
   const applyResult = useCallback(
-    async (result: SyncResult<TripPayload>, successMessage: string) => {
+    async (result: SyncResult<TPayload>, successMessage: string) => {
       if (result.status === "conflict") {
         setConflict(result.conflict);
         setStatus("conflict");
@@ -107,8 +87,8 @@ export const useCloudSync = ({
   const execute = useCallback(
     async (
       action: (
-        manager: SyncManager<TripPayload>,
-      ) => SyncResult<TripPayload> | Promise<SyncResult<TripPayload>>,
+        manager: SyncManager<TPayload>,
+      ) => SyncResult<TPayload> | Promise<SyncResult<TPayload>>,
       pendingStatus: "checking" | "syncing",
       successMessage: string,
     ) => {
@@ -157,13 +137,13 @@ export const useCloudSync = ({
     setError("");
     try {
       const current = await getProvider().getCurrentUser();
-      const membership = current.apps.some(
-        (membershipItem) => membershipItem.id === APP_CONFIG.appId,
+      const appAvailable = current.apps.some(
+        (appItem) => appItem.id === APP_CONFIG.appId,
       );
-      if (!membership) {
+      if (!appAvailable) {
         setAuthenticated(false);
         setStatus("error");
-        setError("当前 Access 账号没有 Atlas 的访问权限。");
+        setError(`同步服务没有返回当前 App：${APP_CONFIG.appId}。`);
         return false;
       }
       setAuthenticated(true);
@@ -174,9 +154,7 @@ export const useCloudSync = ({
     } catch (caught) {
       const appError = toAppError(caught, "Access 会话检查失败。");
       setAuthenticated(false);
-      setStatus(
-        appError.code === "AUTH_REQUIRED" ? "signed-out" : "signed-out",
-      );
+      setStatus("signed-out");
       setError(
         appError.code === "AUTH_REQUIRED"
           ? "尚未登录 Cloudflare Access。"
@@ -196,31 +174,8 @@ export const useCloudSync = ({
   );
 
   useEffect(() => {
-    if (
-      !shouldAutoSync({
-        enabled: autoSync,
-        authenticated,
-        online: navigator.onLine,
-        dirty: localDirty,
-        hasConflict: Boolean(conflict),
-      })
-    )
-      return;
-    const timeout = window.setTimeout(() => void syncNow(), 3_000);
-    return () => window.clearTimeout(timeout);
-  }, [
-    authenticated,
-    autoSync,
-    conflict,
-    localDataVersion,
-    localDirty,
-    syncNow,
-  ]);
-
-  useEffect(() => {
     const handleOnline = () => {
-      if (autoSync && authenticated && !conflict) void syncNow();
-      else if (authenticated) {
+      if (authenticated) {
         setStatus("idle");
         setMessage("网络已恢复，可以手动同步。");
         setError("");
@@ -228,7 +183,7 @@ export const useCloudSync = ({
     };
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
-  }, [authenticated, autoSync, conflict, syncNow]);
+  }, [authenticated]);
 
   const signIn = useCallback(() => {
     window.open(getProvider().loginUrl, "_blank", "noopener,noreferrer");
@@ -260,21 +215,12 @@ export const useCloudSync = ({
       ),
     [execute],
   );
-  const submitLocalVersion = useCallback(
-    () =>
-      execute(
-        (manager) => manager.submitLocalVersion(),
-        "syncing",
-        "本地数据已提交为新的云端版本。",
-      ),
-    [execute],
-  );
   const resolveWithLocal = useCallback(
     () =>
       execute(
         (manager) => manager.resolveWithLocal(),
         "syncing",
-        "已保留本地数据并提交新的云端版本。",
+        "已保留本地数据并覆盖云端最新快照。",
       ),
     [execute],
   );
@@ -301,18 +247,7 @@ export const useCloudSync = ({
   const cancelConflict = useCallback(() => {
     managerRef.current?.cancelConflict();
     setStatus("conflict");
-    setMessage("已取消选择，冲突仍保留，期间不会自动同步。");
-  }, []);
-
-  const setAutoSync = useCallback((enabled: boolean) => {
-    try {
-      preferencesRef.current?.save({ autoSync: enabled });
-      setAutoSyncState(enabled);
-      setMessage(enabled ? "自动同步已开启。" : "自动同步已关闭。");
-      setError("");
-    } catch (caught) {
-      setError(toAppError(caught, "自动同步设置保存失败。").message);
-    }
+    setMessage("已取消选择，冲突仍保留；再次同步时继续处理。");
   }, []);
 
   return {
@@ -324,19 +259,18 @@ export const useCloudSync = ({
     message,
     error,
     conflict,
-    autoSync,
     signIn,
     signOut,
     checkSession,
     syncNow,
     restoreRemote,
-    submitLocalVersion,
     resolveWithLocal,
     resolveWithRemote,
     exportConflict,
     cancelConflict,
-    setAutoSync,
   };
 };
 
-export type CloudSyncController = ReturnType<typeof useCloudSync>;
+export type CloudSyncController<TPayload> = ReturnType<
+  typeof useCloudSync<TPayload>
+>;

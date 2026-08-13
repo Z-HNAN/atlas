@@ -27,7 +27,7 @@ export const syncMeResponseSchema = z
   .object({
     user: z
       .object({
-        id: z.string().uuid(),
+        id: z.string().regex(/^[0-9a-f]{64}$/u),
         email: z.string().email(),
       })
       .strict(),

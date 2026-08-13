@@ -1,24 +1,20 @@
-# Atlas 本地可交付版本说明
+# Atlas 当前交付说明
 
 ## 交付结论
 
-Atlas 已完成本地优先数据架构升级。纯本地模式具备完整手工旅行闭环；DeepSeek、Nominatim 和 Cloudflare 快照同步是可选网络增强。
+Atlas 是可独立运行的 Local-first Vite 应用。纯本地模式具备完整手工旅行闭环；DeepSeek、Nominatim 和 Gipsy 共享云备份是可选网络增强。
 
-交付形态为标准 Vite 项目：`npm run dev` 用于本地开发，`npm run build` 生成静态 `dist/`。`vercel.json` 已配置单页应用回退，后续可由维护者自行发布到 Vercel；本次没有执行线上发布。
+`npm run dev` 用于本地开发，`npm run build` 生成静态 `dist/`；`vercel.json` 提供 SPA 回退。Atlas 只部署前端，不包含或发布 Cloudflare Worker、D1、R2、Cron 或 Access 配置。
 
 ## 已交付能力
 
 - Dashboard、旅行列表、AI/手工创建、旅行详情、世界收藏地图、Access 登录入口和设置页面。
-- DeepSeek BYOK 浏览器直连、会话存储、主动持久化、Zod 校验、一次修复和分层错误诊断。
-- Nominatim 串行队列、至少 1.1 秒间隔、匹配评分、IndexedDB 缓存、歧义与失败处理。
-- 旅行四种状态、地点到访与备注、评分、总结、地图和严格 Sky4Sim PLN 导出。
-- IndexedDB 版本化 Envelope、旧 LocalStorage 一次性安全迁移、JSON 导入导出、覆盖前备份和容量提示。
-- Cloudflare Access + Worker + D1 元数据 + 私有 R2 不可变快照；幂等提交、乐观并发、人工冲突和版本保留。
-- Vercel 前端配置、Cloudflare Worker 独立配置模板、PWA 离线应用壳和更新提示。
+- DeepSeek BYOK、Nominatim 串行查询、Zod 校验、地图确认与严格 Sky4Sim PLN 导出。
+- Dexie/IndexedDB 版本化 Envelope、顺序 Schema 迁移、JSON 导入导出、覆盖前备份和容量提示。
+- Gipsy 共享 Worker 的私有 R2 单 Head手动云备份、幂等提交、乐观并发和人工冲突。
+- Vercel 静态配置、PWA 离线应用壳、更新提示和完整工程门禁。
 
 ## 自动验证
-
-交付时执行并要求全部通过：
 
 ```text
 npm run typecheck
@@ -26,25 +22,22 @@ npm run lint
 npm run test -- --run
 npm run format:check
 npm run build
-openspec validate 2026-07-30-cloudflare-snapshot-sync --strict
+openspec validate --all --strict
 ```
-
-浏览器回归覆盖手工创建旅行、添加地点、触发“查询全部未确认地点”、Nominatim 返回、刷新恢复和设置页元数据。
 
 ## 仍需真实环境验收
 
-以下项目依赖维护者账号、本机软件或生产项目：
+以下项目依赖维护者账号、线上基础设施或本机软件：
 
-1. 使用真实 DeepSeek Key 验证余额和模型权限。
-2. 创建 Cloudflare Access Application、D1 和私有 R2，应用 Worker migration 并预配置 Atlas 成员。
-3. 使用两个成员验证冲突、历史版本、readonly 权限和跨用户隔离。
-4. 把 Vercel 正式 Origin 加入 Worker CORS 和 Access Application。
-5. 使用富士山—河口湖—箱根—东京湾路线，在 Sky4Sim 中核对 PLN。
+1. 使用真实 DeepSeek Key 验证模型权限和结构化计划。
+2. 在 `https://atlas-travel.app.10242020.xyz` 验证共享 Access 登录、跨站 Cookie 和 Origin/appId 绑定。
+3. 使用两个浏览器验证手动上传、恢复、双端冲突与不同 Access 用户隔离。
+4. 验证共享 Worker 的线上 R2 Head 覆盖、Hash 和 ETag 竞争。
+5. 使用示例路线在 Sky4Sim 中核对 PLN。
 
 ## 交付入口
 
 - 产品与架构说明：`README.md`
-- 本地启动、Cloudflare 准备和后续手动发布：`START.md`
-- Codex/OpenSpec 协作规则：`agents.md`
-- Worker 和 D1：`worker/`
-- 本次方案、风险与迁移：`openspec/changes/archive/2026-07-30-cloudflare-snapshot-sync/`
+- 本地启动、共享云备份和 Vercel 准备：`START.md`
+- Codex/OpenSpec 协作规则：`AGENTS.md`
+- 当前主规范：`openspec/specs/`

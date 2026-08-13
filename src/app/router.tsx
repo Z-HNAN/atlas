@@ -1,6 +1,5 @@
 import { Route, Routes } from "react-router-dom";
 import AppLayout from "../components/layout/AppLayout";
-import type { CloudSyncController } from "../features/trips/hooks/useCloudSync";
 import type { TripOperation } from "../features/trips/hooks/useTrips";
 import type {
   GeneratedTravelPlan,
@@ -12,6 +11,7 @@ import type {
 } from "../features/trips/types/trips";
 import type { LocalAppEnvelope } from "../lib/local-data/envelope";
 import type { StorageSizeInfo } from "../lib/local-data/storage-size";
+import type { CloudSyncController } from "../lib/sync/use-cloud-sync";
 import Atlas from "../pages/Atlas";
 import Dashboard from "../pages/Dashboard";
 import Login from "../pages/Login";
@@ -26,7 +26,7 @@ interface AppRouterProps {
   geocodeCache: GeocodeCacheEntry[];
   envelope: LocalAppEnvelope<TripPayload> | null;
   storageSize: StorageSizeInfo;
-  cloudSync: CloudSyncController;
+  cloudSync: CloudSyncController<TripPayload>;
   onAddTrip: (draft: TripDraft) => TripOperation<Trip>;
   onAddGeneratedTrip: (plan: GeneratedTravelPlan) => TripOperation<Trip>;
   onReplaceTrip: (trip: Trip) => TripOperation<Trip>;

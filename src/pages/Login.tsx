@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
 import CloudSyncSettings from "../components/settings/CloudSyncSettings";
-import type { CloudSyncController } from "../features/trips/hooks/useCloudSync";
 import type { TripPayload } from "../features/trips/types/trips";
 import type { LocalAppEnvelope } from "../lib/local-data/envelope";
+import type { CloudSyncController } from "../lib/sync/use-cloud-sync";
 
 interface LoginProps {
   envelope: LocalAppEnvelope<TripPayload> | null;
-  cloudSync: CloudSyncController;
+  cloudSync: CloudSyncController<TripPayload>;
 }
 
 const Login = ({ envelope, cloudSync }: LoginProps) => (

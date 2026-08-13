@@ -2,18 +2,18 @@ import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import CloudSyncSettings from "../components/settings/CloudSyncSettings";
 import { APP_CONFIG } from "../config/app-config";
-import type { CloudSyncController } from "../features/trips/hooks/useCloudSync";
 import type { TripOperation } from "../features/trips/hooks/useTrips";
 import { useTravelPlanner } from "../features/trips/hooks/useTravelPlanner";
 import type { TripPayload } from "../features/trips/types/trips";
 import { downloadJson } from "../lib/local-data/download";
 import type { LocalAppEnvelope } from "../lib/local-data/envelope";
 import type { StorageSizeInfo } from "../lib/local-data/storage-size";
+import type { CloudSyncController } from "../lib/sync/use-cloud-sync";
 
 interface SettingsProps {
   envelope: LocalAppEnvelope<TripPayload> | null;
   storageSize: StorageSizeInfo;
-  cloudSync: CloudSyncController;
+  cloudSync: CloudSyncController<TripPayload>;
   onExportData: () => TripOperation<string>;
   onExportLatestBackup: () => TripOperation<string>;
   onImportData: (raw: string) => TripOperation;

@@ -7,19 +7,21 @@
 ## 架构不变量
 
 - 核心功能必须 Local-first：无网络、未登录、未配置同步服务时仍可完整使用本地功能。
-- IndexedDB 是浏览器正式业务数据的主存储；LocalStorage 只允许保存设备偏好、BYOK 持久化选择和一次性旧数据迁移源。
-- UI 不得直接操作 IndexedDB、LocalStorage、sessionStorage、D1、R2 或具体第三方 API URL。
+- IndexedDB 是浏览器正式业务数据的主存储；LocalStorage 只允许保存用户明确选择持久化的 BYOK Key，不得保存或迁移正式业务快照。
+- UI 不得直接操作 IndexedDB、LocalStorage、sessionStorage、R2 或具体第三方 API URL。
 - 持久化数据和外部响应必须通过 Zod 校验；TypeScript 保持 strict，禁止使用显式 `any` 绕过检查。
 - 正式业务数据只能保存在 `LocalAppEnvelope.payload`；API Key、认证 Token 和设备偏好不得进入 Payload、云快照或导出文件。
 - 每次业务数据修改必须递增 dataVersion、更新 updatedAt 并设置 `sync.dirty = true`。
 - schemaVersion 变化必须提供顺序迁移；迁移和导入覆盖前必须备份，失败时不得静默丢弃数据。
-- 云同步是可选增强，默认关闭。前端只访问同步 Worker API；不得包含 Access 私钥、R2 密钥、D1 凭证或其它服务端 Secret。
-- 同步服务固定采用 Cloudflare Access + Worker + D1 元数据 + 私有 R2 不可变快照；D1 不保存业务 Payload，客户端不得直连 R2。
+- 云备份是可选增强，默认关闭且只由用户手动触发。前端只访问同步 Worker API；不得包含 Access 私钥、R2 密钥或其它服务端 Secret。
+- 同步服务固定采用 Gipsy 维护的 Cloudflare Access + Worker + 私有 R2 单 Head；每个 appId 和 Access 用户只保留一个最新快照，客户端不得直连 R2。
 - `version` 是云端提交序号，`payloadSchemaVersion` 是 Payload 结构版本，两者不得混用。
 - 云端提交必须携带 `baseVersion` 和唯一 `commitId`；冲突时禁止自动合并或静默覆盖。
 - 第三方能力必须通过 ExternalApiProvider；Key 默认只进 sessionStorage，用户主动选择后才可持久化，错误和日志不得包含 Key。
 - 浏览器外部请求必须通过 `BrowserHttpClient`；Provider 不得捕获原生 `fetch` 或直接依赖 Ky。无 HTTP 响应只能归类为网络阶段失败，不得仅凭 `TypeError` 武断宣称是 CORS。
-- Vercel 仅部署前端静态站点；同步 Worker 单独部署到 Cloudflare。不得把 Worker Secret 写入 `VITE_` 环境变量。
+- Vercel 仅部署 Atlas 前端静态站点；同步 Worker 由 Gipsy 基础设施维护者单独部署到 Cloudflare。不得把 Worker Secret 写入 `VITE_` 环境变量。
+- Atlas 正式域名固定为 `https://atlas-travel.app.10242020.xyz`；只复用 `https://sync.api.10242020.xyz`，不得创建、注册或部署自己的 Worker、D1、R2、Cron 或 Access Application。
+- 浏览器 Origin 必须与请求路径 appId `atlas-travel` 一致，禁止用宽泛 CORS 绕过 App 隔离。
 - 不提前引入 CRDT、字段级合并、实时协作、增量日志同步或业务查询数据库；出现真实需求后单独立项。
 
 ## 工程化与依赖选择
@@ -43,8 +45,6 @@
 - `src/lib/providers`：第三方 API Provider 协议。
 - `src/lib/errors`：统一错误模型，错误信息不得泄露 Key 或完整私密数据。
 - `tests/unit` 与 `tests/integration`：基础设施和业务生命周期验证。
-- `worker/src`：Cloudflare Worker API、Access JWT 校验、D1/R2 编排和清理任务。
-- `worker/migrations`：D1 元数据表迁移。
 
 ## 变更分级与 OpenSpec
 
@@ -89,7 +89,7 @@ openspec/changes/YYYY-MM-DD-<topic>/
 出现以下任一情况时属于 L 级：
 
 - 修改业务 Schema、schemaVersion、存储格式、迁移、导入覆盖或备份恢复。
-- 修改同步协议、冲突策略、Worker/D1/R2、认证、权限或敏感数据边界。
+- 修改同步协议、冲突策略、Worker/R2、认证、权限或敏感数据边界。
 - 引入新的外部服务、Serverless、IndexedDB、状态管理、业务数据库或跨 Feature 通用层。
 - 修改 PLN 协议兼容、公开 API、核心用户闭环或离线能力。
 - 存在不可逆操作、多个方案的重要权衡或发布兼容风险。
@@ -128,7 +128,7 @@ openspec/changes/YYYY-MM-DD-<topic>/
 
 ## Codex 实施原则
 
-- 开始前阅读相关 OpenSpec、README、现有测试和当前工作区差异，并先给出 S/M/L 分级；S 级不为满足形式而创建 OpenSpec。
+- 开始前阅读相关 OpenSpec、README、START、现有测试和当前工作区差异，并先给出 S/M/L 分级；S 级不为满足形式而创建 OpenSpec。
 - 先沿现有 Feature 边界扩展；只有种子规范明确要求或出现第二个真实使用方时才抽取通用层。
 - React 组件只负责渲染和交互编排，校验、存储、同步和 Provider 逻辑放到对应基础设施。
 - Bug 修复必须优先增加能在修复前失败、修复后通过的回归测试；无法自动化时报告人工验证证据。
@@ -145,7 +145,7 @@ npm run format:check
 npm run build
 ```
 
-本地启动、云配置、OpenSpec 命令、Codex 请求模板和派生步骤统一记录在 `START.md`；影响这些流程的变更必须同步更新指南。
+本地启动、共享云配置、OpenSpec 命令和 Codex 工作流统一记录在 `START.md`；影响这些流程的变更必须同步更新指南。
 
 ## 交付质量清单
 
