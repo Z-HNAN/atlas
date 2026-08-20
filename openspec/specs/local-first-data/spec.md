@@ -8,7 +8,7 @@
 
 ### Requirement: IndexedDB 正式旅行数据
 
-系统 SHALL 通过封装在 `src/lib/local-data` 的 Dexie 适配器，将 `LocalAppEnvelope<TripPayload>` 保存到 IndexedDB 数据库 `atlas-travel-local` 的 `records` Object Store；appId SHALL 为 `atlas-travel`，正式记录键 SHALL 为 `app:atlas-travel:data`。Feature 和 UI SHALL NOT 直接依赖 Dexie。
+系统 SHALL 通过封装在 `src/lib/local-data` 的 Dexie 适配器，将 `LocalAppEnvelope<TripPayload>` 保存到 IndexedDB 数据库 `atlas-local` 的 `records` Object Store；appId SHALL 为 `atlas`，正式记录键 SHALL 为 `app:atlas:data`。Feature 和 UI SHALL NOT 直接依赖 Dexie。
 
 #### Scenario: 首次初始化
 
@@ -31,7 +31,7 @@ LocalStorage SHALL NOT 保存、迁移或备份正式业务快照；Repository �
 
 #### Scenario: 浏览器残留旧正式键
 
-- **WHEN** IndexedDB 为空且 LocalStorage 仍存在旧 `app:atlas-travel:data`
+- **WHEN** IndexedDB 为空且 LocalStorage 仍存在旧业务记录键
 - **THEN** 新版本忽略且不删除该键，并在 IndexedDB 创建当前默认 Envelope
 
 ### Requirement: 异步持久化与并发顺序
@@ -78,6 +78,7 @@ API Key、Access JWT 和设备偏好 SHALL NOT 进入 TripPayload、云快照或
 ## Compatibility
 
 - 旧 Todo 数据位于其它 appId，Atlas 不解释、不覆盖、不删除。
+- `atlas-travel` 调试 IndexedDB 和记录键不迁移、不读取也不删除；回滚旧调试版本时仍可访问旧库。
 - 仍只有旧 LocalStorage 正式数据的开发环境应先用旧版本导出 JSON，再由当前版本导入；新版本不自动读取或清理旧键。
 - Payload 变化必须递增 schemaVersion、提供顺序迁移并在迁移前备份。
 - 旧同步字段 `lastRemoteVersion` 和 `lastSyncedAt` 只在读取兼容层转换为当前字段，不再写回。

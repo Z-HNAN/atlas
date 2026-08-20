@@ -43,7 +43,7 @@ npm run build
 
 ## 数据架构
 
-正式业务数据由 `DexieKeyValueStore` 适配器写入 IndexedDB 数据库 `atlas-travel-local` 的 `records` Object Store，记录键为 `app:atlas-travel:data`。UI 和 Feature 不直接依赖 Dexie 或读写具体存储。
+正式业务数据由 `DexieKeyValueStore` 适配器写入 IndexedDB 数据库 `atlas-local` 的 `records` Object Store，记录键为 `app:atlas:data`。UI 和 Feature 不直接依赖 Dexie 或读写具体存储。
 
 ```text
 LocalAppEnvelope<TripPayload>
@@ -73,14 +73,14 @@ LocalAppEnvelope<TripPayload>
        → 私有 R2：每个 appId + 用户一个最新 Head
 ```
 
-Atlas 正式域名为 `https://atlas-travel.app.10242020.xyz`，复用 `https://sync.api.10242020.xyz`。Atlas 不创建 Worker、D1、R2、Cron、Access Application，也不执行服务端注册。
+Atlas 正式域名为 `https://atlas.app.10242020.xyz`，App ID 为 `atlas`，复用 `https://sync.api.10242020.xyz`。共享 Worker 从正式域名前缀推导 App ID、回显经过校验的具体 Origin，并拒绝跨 App 请求；Atlas 不创建 Worker、D1、R2、Cron、Access Application，也不执行服务端注册。
 
 共享服务只保留当前 Access 用户的最新 Atlas Head，不提供云端历史或自动后台同步。每次提交仍携带 `baseVersion`、唯一 `commitId` 和 SHA-256；双端变化进入人工冲突，不自动合并或静默覆盖。重要节点应手动导出 JSON。
 
 ## 环境变量
 
 ```env
-VITE_APP_ID=atlas-travel
+VITE_APP_ID=atlas
 VITE_ENABLE_CLOUD_SYNC=false
 VITE_SYNC_API_BASE_URL=
 VITE_DEEPSEEK_BASE_URL=https://api.deepseek.com

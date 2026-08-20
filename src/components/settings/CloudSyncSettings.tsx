@@ -76,7 +76,7 @@ const CloudSyncSettings = <TPayload,>({
           <p className="settings-note">
             云端使用 Cloudflare Access 登录。未登录时应用继续只保存到
             IndexedDB。登录完成后请返回本页并检查登录状态；隐私窗口或严格防跟踪
-            可能拦截同步域名的跨站 Cookie，需要允许
+            可能拦截同步域名的跨域会话 Cookie，需要允许
             <code> sync.api.10242020.xyz </code>及 Access 团队域名的 Cookie。
           </p>
           <div className="form-actions">

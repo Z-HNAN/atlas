@@ -91,7 +91,7 @@ const Settings = ({
     <div className="content-page narrow-page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">SETTINGS & DATA</p>
+          <p className="eyebrow">设置与数据</p>
           <h1>设置与数据</h1>
           <p>管理浏览器中的 Key、IndexedDB 本地备份和可选云同步。</p>
         </div>

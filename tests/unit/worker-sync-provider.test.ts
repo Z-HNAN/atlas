@@ -16,27 +16,27 @@ describe("WorkerSyncProvider", () => {
         new Response(
           JSON.stringify({
             user: { id: "a".repeat(64), email: "owner@example.com" },
-            apps: [{ id: "atlas-travel", name: "Atlas", role: "admin" }],
+            apps: [{ id: "atlas", name: "Atlas", role: "admin" }],
           }),
           { headers: { "Content-Type": "application/json" } },
         ),
       ),
     );
     const provider = new WorkerSyncProvider({
-      appId: "atlas-travel",
+      appId: "atlas",
       apiBaseUrl: "https://sync.example.com",
       httpClient: { request },
     });
 
     expect(provider.loginUrl).toBe(
-      "https://sync.example.com/api/v1/me?appId=atlas-travel",
+      "https://sync.example.com/api/v1/me?appId=atlas",
     );
     await expect(provider.getCurrentUser()).resolves.toMatchObject({
       user: { id: "a".repeat(64) },
-      apps: [{ id: "atlas-travel" }],
+      apps: [{ id: "atlas" }],
     });
     expect(request).toHaveBeenCalledWith(
-      "https://sync.example.com/api/v1/me?appId=atlas-travel",
+      "https://sync.example.com/api/v1/me?appId=atlas",
       expect.any(Object),
     );
   });
@@ -49,7 +49,7 @@ describe("WorkerSyncProvider", () => {
         );
         const envelope = await gunzipSnapshot(body);
         expect(envelope).toMatchObject({
-          appId: "atlas-travel",
+          appId: "atlas",
           payloadSchemaVersion: 2,
           deviceId: "device-a",
           data: { trips: [] },
@@ -63,7 +63,7 @@ describe("WorkerSyncProvider", () => {
         });
         return new Response(
           JSON.stringify({
-            appId: "atlas-travel",
+            appId: "atlas",
             version: 5,
             baseVersion: 4,
             commitId: COMMIT_ID,
@@ -77,7 +77,7 @@ describe("WorkerSyncProvider", () => {
       },
     );
     const provider = new WorkerSyncProvider<{ trips: never[] }>({
-      appId: "atlas-travel",
+      appId: "atlas",
       apiBaseUrl: "https://sync.example.com",
       httpClient: { request },
       now: () => new Date("2026-07-30T08:00:00.000Z"),
@@ -100,7 +100,7 @@ describe("WorkerSyncProvider", () => {
   it("下载时校验 SHA-256、解压并读取云端元数据", async () => {
     const bytes = await gzipSnapshot({
       formatVersion: 1,
-      appId: "atlas-travel",
+      appId: "atlas",
       payloadSchemaVersion: 2,
       exportedAt: "2026-07-30T08:00:00.000Z",
       deviceId: "device-a",
@@ -120,13 +120,13 @@ describe("WorkerSyncProvider", () => {
       ),
     );
     const provider = new WorkerSyncProvider({
-      appId: "atlas-travel",
+      appId: "atlas",
       apiBaseUrl: "https://sync.example.com",
       httpClient: { request },
     });
 
     await expect(provider.pullLatest()).resolves.toMatchObject({
-      appId: "atlas-travel",
+      appId: "atlas",
       version: 8,
       payloadSchemaVersion: 2,
       payload: { trips: ["remote"] },
@@ -135,7 +135,7 @@ describe("WorkerSyncProvider", () => {
 
   it("把 409 映射为远端版本冲突", async () => {
     const provider = new WorkerSyncProvider({
-      appId: "atlas-travel",
+      appId: "atlas",
       apiBaseUrl: "https://sync.example.com",
       httpClient: {
         request: () =>

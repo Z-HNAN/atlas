@@ -4,16 +4,16 @@ Atlas 是 Local-first 的 AI 虚拟旅行收藏地图。IndexedDB 是正式业�
 
 正式地址约定：
 
-- Atlas：`https://atlas-travel.app.10242020.xyz`
+- Atlas：`https://atlas.app.10242020.xyz`
 - 共享同步 API：`https://sync.api.10242020.xyz`
 
 ## 0. 先理解边界
 
 - 离线、未登录、未配置 Key、未开启云备份或共享 Worker 故障时，手工旅行、地图、记录、导入导出和 PLN 仍可完整使用。
-- 云备份默认关闭，且只在用户点击“立即同步”“从云端恢复”或处理冲突时访问服务端。
-- 每个 `atlas-travel + Access 用户` 只保存一个最新 Head，不提供云端历史、自动后台同步、字段合并或多人共享同一 Payload。
+- 云备份默认关闭，且只在用户点击“检查登录状态”“立即同步”“从云端恢复”或处理冲突时访问服务端；应用初始化和普通页面不自动访问 Worker。
+- 每个 `atlas + Access 用户` 只保存一个最新 Head，不提供云端历史、自动后台同步、字段合并或多人共享同一 Payload。
 - Atlas 只复用 Gipsy 已部署的 Worker、私有 R2 和 Access Application；本仓库不含 Worker、D1 migration、Wrangler 配置或服务端凭证。
-- Atlas 正式 Origin 必须与 appId `atlas-travel` 一致。
+- Atlas 正式 Origin 必须与 appId `atlas` 一致。Worker 校验 `<appId>.app.10242020.xyz` 后回显具体 Origin，带 credentials 的 CORS 不使用 `*` 或子域通配响应值。
 
 ## 1. 本地启动
 
@@ -29,7 +29,7 @@ npm run dev
 打开 `http://localhost:5173`。纯本地配置：
 
 ```env
-VITE_APP_ID=atlas-travel
+VITE_APP_ID=atlas
 VITE_ENABLE_CLOUD_SYNC=false
 VITE_SYNC_API_BASE_URL=
 VITE_DEEPSEEK_BASE_URL=https://api.deepseek.com
@@ -41,8 +41,8 @@ VITE_NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org
 
 ## 2. 本地数据与恢复
 
-- 正式数据：Dexie 适配的 IndexedDB `atlas-travel-local` / `records`。
-- 正式记录键：`app:atlas-travel:data`。
+- 正式数据：Dexie 适配的 IndexedDB `atlas-local` / `records`。
+- 正式记录键：`app:atlas:data`。
 - LocalStorage：只允许保存用户明确选择持久化的 DeepSeek Key。
 - 全新安装：IndexedDB 为空时直接创建 schemaVersion 1、dataVersion 1 的默认 Envelope。
 - 旧 LocalStorage 业务键：新版本不读取、不删除。若某个开发环境仍只有旧数据，先用旧版本导出 JSON，再在新版本导入。
@@ -67,10 +67,10 @@ DeepSeek Key 不进入 Payload、云快照、导出、URL 或日志。Nominatim 
 
 共享 API 前缀为 `/api/v1`：
 
-- `GET /me?appId=atlas-travel`：检查 Access 身份。
-- `GET /apps/atlas-travel/sync/head`：读取最新 Head 元数据。
-- `PUT /apps/atlas-travel/sync`：提交新的 Head。
-- `GET /apps/atlas-travel/sync/latest`：下载最新快照。
+- `GET /me?appId=atlas`：检查 Access 身份。
+- `GET /apps/atlas/sync/head`：读取最新 Head 元数据。
+- `PUT /apps/atlas/sync`：提交新的 Head。
+- `GET /apps/atlas/sync/latest`：下载最新快照。
 
 上传流程：
 
@@ -88,12 +88,12 @@ DeepSeek Key 不进入 Payload、云快照、导出、URL 或日志。Nominatim 
 Atlas 不需要注册 appId，也不需要运行任何 Cloudflare 命令。正式 Vercel 环境只设置：
 
 ```env
-VITE_APP_ID=atlas-travel
+VITE_APP_ID=atlas
 VITE_ENABLE_CLOUD_SYNC=true
 VITE_SYNC_API_BASE_URL=https://sync.api.10242020.xyz
 ```
 
-前提是用户邮箱已在共享 Cloudflare Access Application 的允许策略内。进入设置页点击“打开 Access 登录”，完成后返回并点击“检查登录状态”。隐私窗口或严格防跟踪可能拦截跨站 Cookie；失败时允许 `sync.api.10242020.xyz` 和 Access 团队域名的 Cookie。
+前提是用户邮箱已在共享 Cloudflare Access Application 的允许策略内。进入设置页点击“打开 Access 登录”，完成后返回并点击“检查登录状态”。隐私窗口或严格防跟踪可能拦截跨域会话 Cookie；失败时允许 `sync.api.10242020.xyz` 和 Access 团队域名的 Cookie。
 
 所有 `VITE_` 变量都是公开信息，不得放 Access 私钥、R2 凭证、DeepSeek Key 或其它 Secret。同步失败不会修改或删除 IndexedDB 本地数据。
 
@@ -102,8 +102,8 @@ VITE_SYNC_API_BASE_URL=https://sync.api.10242020.xyz
 `vercel.json` 已配置 Vite 构建、`dist` 输出和 SPA 回退：
 
 1. 在 Vercel 使用 Node.js 22。
-2. 设置 `VITE_APP_ID=atlas-travel` 和按需的共享云备份公开变量。
-3. 绑定 `atlas-travel.app.10242020.xyz` 并完成 DNS。
+2. 设置 `VITE_APP_ID=atlas` 和按需的共享云备份公开变量。
+3. 绑定 `atlas.app.10242020.xyz` 并完成 DNS。
 4. 不在前端环境变量中存放 Secret。
 5. 发布后验证 `/`、`/settings`、`/trips/new`、`/manifest.webmanifest`、`/sw.js`、深链刷新、离线重开、IndexedDB 写入、导入导出和覆盖前备份。
 6. 开启云备份时，再验证 Access 登录、手动上传、另一浏览器恢复和双端冲突。
@@ -142,4 +142,4 @@ npm run format:check
 npm run build
 ```
 
-`typecheck` 校验前端、测试与构建配置。交付还必须执行 OpenSpec strict 校验。未使用真实 Access 会话时，报告应明确共享 Worker、线上 CORS、R2 上传下载和 Vercel 页面尚未做端到端验证。
+`typecheck` 校验前端、测试与构建配置。交付还必须执行 OpenSpec strict 校验。未使用真实 Access 会话时，报告应明确 Access 身份、R2 上传下载和跨设备冲突尚未做端到端验证；公开 Worker CORS 可以使用不含业务数据的 OPTIONS 预检验证。

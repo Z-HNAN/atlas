@@ -12,7 +12,7 @@ Atlas 是可独立运行的 Local-first Vite 应用。纯本地模式具备完�
 - DeepSeek BYOK、Nominatim 串行查询、Zod 校验、地图确认与严格 Sky4Sim PLN 导出。
 - Dexie/IndexedDB 版本化 Envelope、顺序 Schema 迁移、JSON 导入导出、覆盖前备份和容量提示。
 - Gipsy 共享 Worker 的私有 R2 单 Head手动云备份、幂等提交、乐观并发和人工冲突。
-- Vercel 静态配置、PWA 离线应用壳、更新提示和完整工程门禁。
+- Vercel 静态配置、安全响应头、PWA 离线应用壳、更新提示和完整工程门禁。
 
 ## 自动验证
 
@@ -30,7 +30,7 @@ openspec validate --all --strict
 以下项目依赖维护者账号、线上基础设施或本机软件：
 
 1. 使用真实 DeepSeek Key 验证模型权限和结构化计划。
-2. 在 `https://atlas-travel.app.10242020.xyz` 验证共享 Access 登录、跨站 Cookie 和 Origin/appId 绑定。
+2. 在 `https://atlas.app.10242020.xyz` 验证共享 Access 登录、跨域会话 Cookie 和 Origin/appId 绑定。
 3. 使用两个浏览器验证手动上传、恢复、双端冲突与不同 Access 用户隔离。
 4. 验证共享 Worker 的线上 R2 Head 覆盖、Hash 和 ETag 竞争。
 5. 使用示例路线在 Sky4Sim 中核对 PLN。

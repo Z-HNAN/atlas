@@ -19,7 +19,7 @@ const Dashboard = ({ trips }: { trips: Trip[] }) => {
     <div className="dashboard-page">
       <section className="dashboard-hero">
         <div className="hero-copy">
-          <p className="eyebrow">PERSONAL VIRTUAL TRAVEL ATLAS</p>
+          <p className="eyebrow">个人虚拟旅行图鉴</p>
           <h1>
             让每一次起飞，
             <br />
@@ -63,7 +63,7 @@ const Dashboard = ({ trips }: { trips: Trip[] }) => {
       <section className="section-block">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">RECENT JOURNEYS</p>
+            <p className="eyebrow">最近旅行</p>
             <h2>最近的旅行</h2>
           </div>
           <Link className="text-link" to="/trips">

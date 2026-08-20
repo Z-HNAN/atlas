@@ -26,8 +26,8 @@ Atlas SHALL 作为 Gipsy 的派生 App，只复用 `https://sync.api.10242020.xy
 
 #### Scenario: 启用 Atlas 正式云备份
 
-- **WHEN** 维护者部署 `https://atlas-travel.app.10242020.xyz`
-- **THEN** 只配置 `atlas-travel`、同步开关和共享 API URL，不创建或修改 Cloudflare 服务端资源
+- **WHEN** 维护者部署 `https://atlas.app.10242020.xyz`
+- **THEN** 只配置 `atlas`、同步开关和共享 API URL，不创建或修改 Cloudflare 服务端资源
 
 ### Requirement: OpenSpec 与 Codex 开发流程
 
@@ -45,7 +45,7 @@ Codex SHALL 读取根目录 `AGENTS.md`、START、相关主规范、现有测试
 
 ### Requirement: 当前 Atlas 产品边界
 
-Atlas SHALL 保留 `atlas-travel` appId、TripPayload、旅行 Feature、DeepSeek BYOK、Nominatim、Leaflet、PLN、IndexedDB、导入导出、PWA 和手动共享云备份；Seed 的 Todo Demo、独立 Worker、自动同步和旧 LocalStorage 初始化兼容 SHALL NOT 进入当前产品。
+Atlas SHALL 保留 `atlas` appId、TripPayload、旅行 Feature、DeepSeek BYOK、Nominatim、Leaflet、PLN、IndexedDB、导入导出、PWA 和手动共享云备份；Seed 的 Todo Demo、独立 Worker、自动同步和旧 LocalStorage 初始化兼容 SHALL NOT 进入当前产品。
 
 #### Scenario: 回顾 Gipsy Seed 升级
 

@@ -27,16 +27,16 @@ Atlas SHALL 复用 Gipsy 基础设施维护者部署的 `https://sync.api.102420
 #### Scenario: Atlas 启用云备份
 
 - **WHEN** 正式环境开启共享云备份
-- **THEN** 只设置 `VITE_APP_ID=atlas-travel`、同步开关和共享 API 公开地址，不运行服务端命令
+- **THEN** 只设置 `VITE_APP_ID=atlas`、同步开关和共享 API 公开地址，不运行服务端命令
 
 ### Requirement: 正式 Origin 与 App 隔离
 
-Atlas 正式 Origin SHALL 为 `https://atlas-travel.app.10242020.xyz`。客户端 SHALL 只请求 `atlas-travel` 路径，并在 `/me` 请求中携带 `appId=atlas-travel`；共享 Worker SHALL 从正式 Origin 推导 appId 并拒绝 Origin 与路径不一致的请求。
+Atlas 正式 Origin SHALL 为 `https://atlas.app.10242020.xyz`。客户端 SHALL 只请求 `atlas` 路径，并在 `/me` 请求中携带 `appId=atlas`；共享 Worker SHALL 从正式 Origin 推导 appId、回显经过校验的具体 Origin，并拒绝 Origin 与路径不一致的请求。
 
 #### Scenario: 同名 Atlas 请求
 
-- **WHEN** 正式 Atlas Origin 请求 `/api/v1/apps/atlas-travel/sync/latest`
-- **THEN** Worker 继续执行 Access 身份和用户 Head 隔离校验
+- **WHEN** 正式 Atlas Origin 请求 `/api/v1/apps/atlas/sync/latest`
+- **THEN** Worker 返回该具体 Origin 的 credentialed CORS 响应并继续执行 Access 身份和用户 Head 隔离校验
 
 #### Scenario: 跨 App 请求
 
@@ -49,7 +49,7 @@ Atlas 正式 Origin SHALL 为 `https://atlas-travel.app.10242020.xyz`。客户�
 
 #### Scenario: 身份检查成功
 
-- **WHEN** `/me?appId=atlas-travel` 返回有效匿名用户 ID、邮箱与 Atlas 条目
+- **WHEN** `/me?appId=atlas` 返回有效匿名用户 ID、邮箱与 Atlas 条目
 - **THEN** 客户端显示已登录账号并允许手动同步
 
 #### Scenario: 不同 Access 用户
@@ -59,7 +59,17 @@ Atlas 正式 Origin SHALL 为 `https://atlas-travel.app.10242020.xyz`。客户�
 
 ### Requirement: 单 Head 手动同步 API
 
-共享 Worker SHALL 在 `/api/v1` 提供 `/me?appId=atlas-travel`、head、提交和 latest 接口；每个 `appId + 用户` SHALL 只保留一个最新 Head。客户端 SHALL 只在用户主动点击同步、恢复或处理冲突时访问同步数据接口，SHALL NOT 自动后台同步或提供云端历史入口。
+共享 Worker SHALL 在 `/api/v1` 提供 `/me?appId=atlas`、head、提交和 latest 接口；每个 `appId + 用户` SHALL 只保留一个最新 Head。客户端 SHALL 只在用户主动检查登录、同步、恢复或处理冲突时访问共享 Worker，SHALL NOT 在应用初始化或普通路由加载时自动请求身份或同步数据，也 SHALL NOT 提供云端历史入口。
+
+#### Scenario: 打开普通页面
+
+- **WHEN** 用户打开首页、地图或旅行页但没有操作云同步
+- **THEN** 应用不请求 `/me` 或同步数据接口，本地功能完整可用
+
+#### Scenario: 主动检查身份
+
+- **WHEN** 用户在设置或登录页点击“检查登录状态”
+- **THEN** 客户端请求 `/me?appId=atlas` 并更新当前会话状态
 
 #### Scenario: 只修改本地
 
@@ -135,6 +145,7 @@ Atlas 正式 Origin SHALL 为 `https://atlas-travel.app.10242020.xyz`。客户�
 ## Compatibility
 
 - 当前 IndexedDB Envelope、标准导出和云快照格式不变，不提升 TripPayload schemaVersion。
+- `atlas-travel` 调试 IndexedDB、导出和云端 Head 不迁移、不读取也不删除；新版本直接使用 `atlas` 身份和新的本地/云端命名空间。
 - 首次连接共享 Worker 时，云 version 可从 1 重新开始；不得把旧 Atlas 独立 Worker 的 version 当作共享基线。
 - 旧 D1/R2 历史不自动迁移；需要保留时先使用旧版本导出标准 JSON，再由当前版本导入并提交共享 Head。
 - 共享服务只保留最新 Head；重要节点依赖本地覆盖前备份和手工 JSON 导出。

@@ -25,10 +25,13 @@ interface UseCloudSyncOptions<TPayload> {
   onLocalChange: () => void | Promise<void>;
 }
 
-const initialStatus = (): CloudSyncStatus => {
-  if (!APP_CONFIG.cloudSyncEnabled) return "disabled";
-  if (!isCloudSyncConfigured) return "config-required";
-  return "checking";
+export const getInitialCloudSyncStatus = (
+  cloudSyncEnabled: boolean,
+  configured: boolean,
+): CloudSyncStatus => {
+  if (!cloudSyncEnabled) return "disabled";
+  if (!configured) return "config-required";
+  return "signed-out";
 };
 
 export const useCloudSync = <TPayload>({
@@ -43,7 +46,12 @@ export const useCloudSync = <TPayload>({
   );
   const [authenticated, setAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState("");
-  const [status, setStatus] = useState<CloudSyncStatus>(initialStatus);
+  const [status, setStatus] = useState<CloudSyncStatus>(() =>
+    getInitialCloudSyncStatus(
+      APP_CONFIG.cloudSyncEnabled,
+      isCloudSyncConfigured,
+    ),
+  );
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState<SyncConflict<TPayload> | null>(null);
@@ -163,10 +171,6 @@ export const useCloudSync = <TPayload>({
       return false;
     }
   }, [getProvider]);
-
-  useEffect(() => {
-    void checkSession();
-  }, [checkSession]);
 
   const syncNow = useCallback(
     () => execute((manager) => manager.sync(), "syncing", "本地与云端已同步。"),

@@ -6,7 +6,7 @@ const Trips = ({ trips }: { trips: Trip[] }) => (
   <div className="content-page">
     <header className="page-header">
       <div>
-        <p className="eyebrow">JOURNEY LIBRARY</p>
+        <p className="eyebrow">旅行收藏</p>
         <h1>旅行收藏</h1>
         <p>从灵感草稿到完成记录，所有路线都在这里。</p>
       </div>

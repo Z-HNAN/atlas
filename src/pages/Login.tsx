@@ -13,14 +13,14 @@ const Login = ({ envelope, cloudSync }: LoginProps) => (
   <div className="content-page narrow-page">
     <header className="page-header">
       <div>
-        <p className="eyebrow">OPTIONAL CLOUD ACCOUNT</p>
+        <p className="eyebrow">可选云端账户</p>
         <h1>登录 Atlas</h1>
         <p>
           使用 Cloudflare Access
           固定团队身份开启跨设备备份。登录不是本地旅行功能的前置条件。
         </p>
       </div>
-      <Link className="ghost-btn" to="/">
+      <Link className="ghost-btn login-skip-link" to="/">
         暂不登录
       </Link>
     </header>

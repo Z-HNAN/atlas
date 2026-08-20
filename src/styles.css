@@ -308,6 +308,28 @@
     background: #dfe6df;
   }
 
+  .map-load-state {
+    position: absolute;
+    inset: 0;
+    z-index: 500;
+    display: grid;
+    place-items: center;
+    padding: 1.25rem;
+    pointer-events: none;
+    color: #314a43;
+    background: rgb(237 241 235 / 78%);
+    backdrop-filter: blur(2px);
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 750;
+  }
+
+  .map-load-state.is-error {
+    align-content: end;
+    color: #7b3527;
+    background: linear-gradient(transparent 55%, rgb(249 222 215 / 92%));
+  }
+
   .atlas-leaflet-map {
     width: 100%;
     height: 100%;
@@ -1066,6 +1088,11 @@
     line-height: 1.6;
   }
 
+  .login-skip-link {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
   .settings-section {
     padding: 2rem 0;
     border-top: 1px solid #dde1da;
@@ -1178,6 +1205,64 @@
   .floating-feedback.success {
     color: #f2fff9;
     background: #176451;
+  }
+
+  .trip-detail-page .floating-feedback {
+    bottom: 5.8rem;
+  }
+
+  .unsaved-save-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 1rem;
+    z-index: 1000;
+    width: min(680px, calc(100vw - 2rem));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 0.8rem 0.7rem 1rem;
+    color: #f6f1e7;
+    background: rgb(23 53 47 / 96%);
+    border: 1px solid rgb(255 255 255 / 16%);
+    border-radius: 16px;
+    box-shadow: 0 18px 48px rgb(23 53 47 / 32%);
+    backdrop-filter: blur(16px);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .navigation-blocker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgb(11 28 24 / 58%);
+    backdrop-filter: blur(5px);
+  }
+
+  .navigation-blocker-panel {
+    width: min(460px, 100%);
+    padding: 1.4rem;
+    color: #18302c;
+    background: #fffdf8;
+    border: 1px solid #d8ddd4;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgb(12 33 28 / 32%);
+  }
+
+  .navigation-blocker-panel strong {
+    font-family: Georgia, serif;
+    font-size: 1.45rem;
+    font-weight: 500;
+  }
+
+  .navigation-blocker-panel p {
+    margin: 0.7rem 0 1.2rem;
+    color: #687772;
+    line-height: 1.6;
   }
 
   .pwa-update-banner,
@@ -1429,6 +1514,11 @@
 
   .map-caption,
   .site-footer {
+    flex-direction: column;
+  }
+
+  .unsaved-save-bar {
+    align-items: stretch;
     flex-direction: column;
   }
 }

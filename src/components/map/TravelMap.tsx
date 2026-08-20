@@ -1,5 +1,5 @@
 import L, { type LatLngBoundsExpression } from "leaflet";
-import { Fragment, useEffect, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   Marker,
@@ -18,6 +18,7 @@ interface TravelMapProps {
 }
 
 type LocatedPoint = TravelPoint & { lat: number; lng: number };
+type TileStatus = "loading" | "ready" | "error";
 
 const hasCoordinates = (point: TravelPoint): point is LocatedPoint =>
   point.lat !== null && point.lng !== null;
@@ -70,6 +71,24 @@ const TravelMap = ({
   interactiveRoutes = false,
 }: TravelMapProps) => {
   const navigate = useNavigate();
+  const [tileStatus, setTileStatus] = useState<TileStatus>("loading");
+  const tileErrorRef = useRef(false);
+  const tileEventHandlers = useMemo(
+    () => ({
+      loading: () => {
+        tileErrorRef.current = false;
+        setTileStatus("loading" as const);
+      },
+      load: () => {
+        setTileStatus(tileErrorRef.current ? "error" : "ready");
+      },
+      tileerror: () => {
+        tileErrorRef.current = true;
+        setTileStatus("error" as const);
+      },
+    }),
+    [],
+  );
 
   return (
     <div className={`map-frame ${className}`.trim()}>
@@ -83,6 +102,7 @@ const TravelMap = ({
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          eventHandlers={tileEventHandlers}
         />
         <FitDataBounds trips={trips} />
         {trips.map((trip) => {
@@ -147,6 +167,13 @@ const TravelMap = ({
           );
         })}
       </MapContainer>
+      {tileStatus !== "ready" ? (
+        <div className={`map-load-state is-${tileStatus}`}>
+          {tileStatus === "loading"
+            ? "正在加载地图…"
+            : "地图底图加载失败，可继续查看路线并编辑坐标。"}
+        </div>
+      ) : null}
     </div>
   );
 };

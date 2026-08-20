@@ -70,7 +70,7 @@ const NewTrip = ({ onAddTrip, onAddGeneratedTrip }: NewTripProps) => {
     <div className="content-page narrow-page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">NEW JOURNEY</p>
+          <p className="eyebrow">新建旅行</p>
           <h1>下一次，想去哪里？</h1>
           <p>AI 负责提供灵感与顺序，真实坐标仍由地图查询和你亲自确认。</p>
         </div>

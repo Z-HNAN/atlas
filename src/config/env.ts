@@ -21,7 +21,7 @@ const optionalPublicUrlSchema = z
 
 const environmentSchema = z
   .object({
-    VITE_APP_ID: appIdSchema.optional().default("atlas-travel"),
+    VITE_APP_ID: appIdSchema.optional().default("atlas"),
     VITE_ENABLE_CLOUD_SYNC: z
       .enum(["true", "false"])
       .optional()

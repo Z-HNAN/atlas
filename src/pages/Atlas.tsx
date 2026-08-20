@@ -51,7 +51,7 @@ const Atlas = ({ trips }: { trips: Trip[] }) => {
     <div className="atlas-page">
       <header className="page-header atlas-header">
         <div>
-          <p className="eyebrow">WORLD COLLECTION MAP</p>
+          <p className="eyebrow">世界收藏地图</p>
           <h1>我的世界收藏地图</h1>
           <p>橙色是已经到访，灰色是仍在等待的下一站。</p>
         </div>

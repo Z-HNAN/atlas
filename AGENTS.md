@@ -20,8 +20,8 @@
 - 第三方能力必须通过 ExternalApiProvider；Key 默认只进 sessionStorage，用户主动选择后才可持久化，错误和日志不得包含 Key。
 - 浏览器外部请求必须通过 `BrowserHttpClient`；Provider 不得捕获原生 `fetch` 或直接依赖 Ky。无 HTTP 响应只能归类为网络阶段失败，不得仅凭 `TypeError` 武断宣称是 CORS。
 - Vercel 仅部署 Atlas 前端静态站点；同步 Worker 由 Gipsy 基础设施维护者单独部署到 Cloudflare。不得把 Worker Secret 写入 `VITE_` 环境变量。
-- Atlas 正式域名固定为 `https://atlas-travel.app.10242020.xyz`；只复用 `https://sync.api.10242020.xyz`，不得创建、注册或部署自己的 Worker、D1、R2、Cron 或 Access Application。
-- 浏览器 Origin 必须与请求路径 appId `atlas-travel` 一致，禁止用宽泛 CORS 绕过 App 隔离。
+- Atlas 正式域名固定为 `https://atlas.app.10242020.xyz`；只复用 `https://sync.api.10242020.xyz`，不得创建、注册或部署自己的 Worker、D1、R2、Cron 或 Access Application。
+- 浏览器 Origin 必须与请求路径 appId `atlas` 一致；Worker 校验统一正式域名规则后回显具体 Origin，禁止用宽泛 CORS 绕过 App 隔离。
 - 不提前引入 CRDT、字段级合并、实时协作、增量日志同步或业务查询数据库；出现真实需求后单独立项。
 
 ## 工程化与依赖选择

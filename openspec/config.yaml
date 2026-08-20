@@ -5,7 +5,7 @@ context: |
   技术栈：Vite、React、严格 TypeScript、React Router、Tailwind CSS、Zod、Leaflet、React Leaflet、Vitest、PWA。
   架构：Client-first 与 Local-first；IndexedDB 保存版本化 LocalAppEnvelope<TripPayload>；Cloudflare Access、Gipsy 共享 Worker 和私有 R2 单 Head 手动云备份可选且默认关闭。
   外部能力：DeepSeek BYOK 生成结构化旅行计划；Nominatim 串行查询真实坐标；Leaflet 展示路线；浏览器本地生成严格 Custom/User PLN。
-  部署：Vercel 只承载 Atlas 前端；正式域名为 https://atlas-travel.app.10242020.xyz；同步 Worker 由 Gipsy 基础设施维护者部署，Atlas 不创建 Cloudflare 服务端资源。
+  部署：Vercel 只承载 Atlas 前端；正式域名为 https://atlas.app.10242020.xyz，appId 为 atlas；同步 Worker 由 Gipsy 基础设施维护者部署，Atlas 不创建 Cloudflare 服务端资源。
   安全：所有持久化和外部数据经 Zod 校验；API Key 和 Access JWT 不进入 Payload、导出或云端；共享 Worker 强制校验身份、Origin/appId 和用户隔离；前端禁止私密凭证。
   协作：所有产出使用中文；Codex 实现前先维护 OpenSpec，交付前运行 typecheck、lint、test、format:check、build，并维护 START 指南。
 

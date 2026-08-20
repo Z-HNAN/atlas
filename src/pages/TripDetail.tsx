@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useBlocker, useNavigate, useParams } from "react-router-dom";
 import TravelMap from "../components/map/TravelMap";
 import type { TripOperation } from "../features/trips/hooks/useTrips";
 import { downloadPln } from "../features/trips/pln/generate-pln";
@@ -8,6 +8,7 @@ import {
   SerialGeocodeQueue,
 } from "../features/trips/providers/nominatim-geocoder";
 import { TRIP_STATUS_LABEL } from "../features/trips/status";
+import { hasUnsavedTripChanges } from "../features/trips/unsaved-changes";
 import type {
   GeocodeCacheEntry,
   TravelPoint,
@@ -41,8 +42,39 @@ const TripDetail = ({
   const [geocoding, setGeocoding] = useState("");
   const geocoderRef = useRef(new NominatimGeocoder());
   const queueRef = useRef(new SerialGeocodeQueue());
+  const persistedSourceRef = useRef(source);
+  const allowNavigationRef = useRef(false);
 
-  useEffect(() => setDraft(source ?? null), [source]);
+  useEffect(() => {
+    const previousSource = persistedSourceRef.current;
+    setDraft((current) => {
+      if (!source) return null;
+      if (!current || current.id !== source.id) return source;
+      if (hasUnsavedTripChanges(previousSource, current)) return current;
+      return source;
+    });
+    persistedSourceRef.current = source;
+  }, [source]);
+
+  const isDirty = useMemo(
+    () => hasUnsavedTripChanges(source, draft),
+    [draft, source],
+  );
+  const shouldBlock = useCallback(
+    () => isDirty && !allowNavigationRef.current,
+    [isDirty],
+  );
+  const blocker = useBlocker(shouldBlock);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
 
   const orderedPoints = useMemo(
     () =>
@@ -323,9 +355,13 @@ const TripDetail = ({
               void (async () => {
                 if (!window.confirm(`确认删除“${draft.title}”及全部地点吗？`))
                   return;
+                allowNavigationRef.current = true;
                 const result = await onRemoveTrip(draft.id);
                 if (result.ok) navigate("/trips");
-                else setError(result.error);
+                else {
+                  allowNavigationRef.current = false;
+                  setError(result.error);
+                }
               })();
             }}
           >
@@ -349,6 +385,7 @@ const TripDetail = ({
           <button
             className="primary-btn"
             type="button"
+            disabled={!isDirty}
             onClick={() => void save(draft, "旅行修改已保存。")}
           >
             保存修改
@@ -409,7 +446,7 @@ const TripDetail = ({
           </div>
         </section>
         <aside className="status-panel">
-          <p className="eyebrow">TRIP STATUS</p>
+          <p className="eyebrow">旅行状态</p>
           <h2>旅行进度</h2>
           <div className="status-actions">
             {draft.status === "draft" ? (
@@ -478,7 +515,7 @@ const TripDetail = ({
       <section className="points-section">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">ROUTE POINTS</p>
+            <p className="eyebrow">路线地点</p>
             <h2>路线与人工确认</h2>
             <p>编辑地点会把旅行退回草稿；顺序编号会同步到地图与 PLN。</p>
           </div>
@@ -748,7 +785,7 @@ const TripDetail = ({
       <section className="record-section">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">TRAVEL LOG</p>
+            <p className="eyebrow">旅行记录</p>
             <h2>评分与旅行总结</h2>
           </div>
         </div>
@@ -821,6 +858,46 @@ const TripDetail = ({
           />
         </label>
       </section>
+      {isDirty ? (
+        <div className="unsaved-save-bar">
+          <span>当前旅行有尚未保存的修改。</span>
+          <button
+            className="primary-btn"
+            type="button"
+            onClick={() => void save(draft, "旅行修改已保存。")}
+          >
+            保存修改
+          </button>
+        </div>
+      ) : null}
+      {blocker.state === "blocked" ? (
+        <div className="navigation-blocker-backdrop">
+          <div className="navigation-blocker-panel" role="dialog">
+            <strong>尚未保存修改</strong>
+            <p>离开后，本页尚未保存的旅行修改会丢失。</p>
+            <div className="detail-actions">
+              <button
+                className="primary-btn"
+                type="button"
+                onClick={() => blocker.reset()}
+              >
+                留在本页
+              </button>
+              <button
+                className="danger-btn"
+                type="button"
+                onClick={() => {
+                  allowNavigationRef.current = true;
+                  setDraft(source);
+                  blocker.proceed();
+                }}
+              >
+                放弃修改并离开
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {error ? (
         <div className="floating-feedback error" role="alert">
           {error}
