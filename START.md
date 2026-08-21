@@ -72,6 +72,8 @@ DeepSeek Key 不进入 Payload、云快照、导出、URL 或日志。Nominatim 
 - `PUT /apps/atlas/sync`：提交新的 Head。
 - `GET /apps/atlas/sync/latest`：下载最新快照。
 
+设置页不会在打开时自动访问共享服务。用户点击“检查登录状态”后，客户端先确认 Access 身份，再读取 Head 元数据，展示真实云端版本和云端最后同步时间；已登录时可以点击“刷新云端信息”重新查询。页面不根据这些信息自动判断本地或云端哪一方更新。
+
 上传流程：
 
 1. 客户端把 Envelope 序列化为 JSON、gzip，并对最终字节计算 SHA-256。

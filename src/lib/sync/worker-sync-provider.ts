@@ -8,11 +8,12 @@ import {
 } from "../http/browser-http-client";
 import {
   apiErrorSchema,
+  cloudHeadResponseSchema,
   syncMeResponseSchema,
   uploadResultSchema,
 } from "./schemas";
 import { gunzipSnapshot, gzipSnapshot, sha256Hex } from "./snapshot-codec";
-import type { RemoteSnapshot, SyncProvider } from "./types";
+import type { CloudHeadMetadata, RemoteSnapshot, SyncProvider } from "./types";
 
 interface WorkerSyncProviderOptions {
   appId: string;
@@ -71,6 +72,26 @@ export class WorkerSyncProvider<TPayload> implements SyncProvider<TPayload> {
         "同步服务返回的用户信息不正确。",
         parsed.error,
       );
+    }
+    return parsed.data;
+  }
+
+  async getHead(): Promise<CloudHeadMetadata | null> {
+    const response = await this.request(
+      `/api/v1/apps/${encodeURIComponent(this.options.appId)}/sync/head`,
+    );
+    if (!response.ok) throw await toApiError(response);
+    const parsed = cloudHeadResponseSchema.safeParse(await readJson(response));
+    if (!parsed.success) {
+      throw new AppError(
+        "INVALID_RESPONSE",
+        "同步服务返回的云端信息不正确。",
+        parsed.error,
+      );
+    }
+    if ("head" in parsed.data) return null;
+    if (parsed.data.appId !== this.options.appId) {
+      throw new AppError("PERMISSION_DENIED", "同步服务返回了其它应用的信息。");
     }
     return parsed.data;
   }

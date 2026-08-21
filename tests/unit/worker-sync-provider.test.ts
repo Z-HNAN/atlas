@@ -41,6 +41,85 @@ describe("WorkerSyncProvider", () => {
     );
   });
 
+  it("读取真实云端 Head 版本和最后同步时间", async () => {
+    const request = vi.fn<BrowserHttpClient["request"]>(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            appId: "atlas",
+            version: 8,
+            baseVersion: 7,
+            commitId: COMMIT_ID,
+            payloadSchemaVersion: 2,
+            deviceId: "device-a",
+            createdAt: "2026-08-21T08:00:00.000Z",
+            idempotent: false,
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    const provider = new WorkerSyncProvider({
+      appId: "atlas",
+      apiBaseUrl: "https://sync.example.com",
+      httpClient: { request },
+    });
+
+    await expect(provider.getHead()).resolves.toMatchObject({
+      version: 8,
+      createdAt: "2026-08-21T08:00:00.000Z",
+    });
+    expect(request).toHaveBeenCalledWith(
+      "https://sync.example.com/api/v1/apps/atlas/sync/head",
+      expect.any(Object),
+    );
+  });
+
+  it("云端还没有快照时返回空 Head", async () => {
+    const provider = new WorkerSyncProvider({
+      appId: "atlas",
+      apiBaseUrl: "https://sync.example.com",
+      httpClient: {
+        request: () =>
+          Promise.resolve(
+            new Response(JSON.stringify({ head: null }), {
+              headers: { "Content-Type": "application/json" },
+            }),
+          ),
+      },
+    });
+
+    await expect(provider.getHead()).resolves.toBeNull();
+  });
+
+  it("拒绝其它 App 的 Head 元数据", async () => {
+    const provider = new WorkerSyncProvider({
+      appId: "atlas",
+      apiBaseUrl: "https://sync.example.com",
+      httpClient: {
+        request: () =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({
+                appId: "notes",
+                version: 1,
+                baseVersion: 0,
+                commitId: COMMIT_ID,
+                payloadSchemaVersion: 1,
+                deviceId: "device-a",
+                createdAt: "2026-08-21T08:00:00.000Z",
+                idempotent: false,
+              }),
+            ),
+          ),
+      },
+    });
+
+    await expect(provider.getHead()).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
+    });
+  });
+
   it("上传 gzip 字节、完整性摘要和独立云版本 Header", async () => {
     const request = vi.fn<BrowserHttpClient["request"]>(
       async (_input, init) => {

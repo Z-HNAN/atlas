@@ -4,7 +4,12 @@ import { isCloudSyncConfigured } from "../../config/env";
 import { toAppError } from "../errors/app-error";
 import type { LocalDataRepository } from "../local-data/local-data-repository";
 import { SyncManager } from "./sync-manager";
-import type { ConflictExports, SyncConflict, SyncResult } from "./types";
+import type {
+  CloudHeadMetadata,
+  ConflictExports,
+  SyncConflict,
+  SyncResult,
+} from "./types";
 import { WorkerSyncProvider } from "./worker-sync-provider";
 
 export type CloudSyncStatus =
@@ -24,6 +29,8 @@ interface UseCloudSyncOptions<TPayload> {
   isPayloadEmpty: (payload: TPayload) => boolean;
   onLocalChange: () => void | Promise<void>;
 }
+
+type CloudHeadSummary = Pick<CloudHeadMetadata, "version" | "createdAt">;
 
 export const getInitialCloudSyncStatus = (
   cloudSyncEnabled: boolean,
@@ -55,6 +62,8 @@ export const useCloudSync = <TPayload>({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState<SyncConflict<TPayload> | null>(null);
+  const [cloudHead, setCloudHead] = useState<CloudHeadSummary | null>(null);
+  const [cloudHeadChecked, setCloudHeadChecked] = useState(false);
 
   const getProvider = useCallback(() => {
     providerRef.current ??= new WorkerSyncProvider<TPayload>({
@@ -73,9 +82,21 @@ export const useCloudSync = <TPayload>({
     return managerRef.current;
   }, [getProvider, isPayloadEmpty, repository]);
 
+  const loadCloudHead = useCallback(async () => {
+    const head = await getProvider().getHead();
+    setCloudHead(head);
+    setCloudHeadChecked(true);
+    return head;
+  }, [getProvider]);
+
   const applyResult = useCallback(
     async (result: SyncResult<TPayload>, successMessage: string) => {
       if (result.status === "conflict") {
+        setCloudHead({
+          version: result.conflict.remote.version,
+          createdAt: result.conflict.remote.createdAt,
+        });
+        setCloudHeadChecked(true);
         setConflict(result.conflict);
         setStatus("conflict");
         setMessage("");
@@ -86,10 +107,23 @@ export const useCloudSync = <TPayload>({
         setMessage(successMessage);
         setError("");
         await onLocalChange();
+        try {
+          await loadCloudHead();
+        } catch (caught) {
+          const appError = toAppError(caught, "云端信息刷新失败。");
+          setCloudHeadChecked(false);
+          if (appError.code === "AUTH_REQUIRED") {
+            setAuthenticated(false);
+            setUserEmail("");
+            setCloudHead(null);
+            setStatus("signed-out");
+          }
+          setError(`同步操作已完成，但${appError.message}`);
+        }
       }
       return result;
     },
-    [onLocalChange],
+    [loadCloudHead, onLocalChange],
   );
 
   const execute = useCallback(
@@ -121,6 +155,9 @@ export const useCloudSync = <TPayload>({
           const appError = toAppError(caught, "云同步失败，请稍后重试。");
           if (appError.code === "AUTH_REQUIRED") {
             setAuthenticated(false);
+            setUserEmail("");
+            setCloudHead(null);
+            setCloudHeadChecked(false);
             setStatus("signed-out");
           } else {
             setStatus(appError.code === "OFFLINE" ? "offline" : "error");
@@ -143,26 +180,19 @@ export const useCloudSync = <TPayload>({
     if (!APP_CONFIG.cloudSyncEnabled || !isCloudSyncConfigured) return false;
     setStatus("checking");
     setError("");
+    setMessage("");
+    setCloudHeadChecked(false);
+    let current: Awaited<
+      ReturnType<WorkerSyncProvider<TPayload>["getCurrentUser"]>
+    >;
     try {
-      const current = await getProvider().getCurrentUser();
-      const appAvailable = current.apps.some(
-        (appItem) => appItem.id === APP_CONFIG.appId,
-      );
-      if (!appAvailable) {
-        setAuthenticated(false);
-        setStatus("error");
-        setError(`同步服务没有返回当前 App：${APP_CONFIG.appId}。`);
-        return false;
-      }
-      setAuthenticated(true);
-      setUserEmail(current.user.email);
-      setStatus("idle");
-      setMessage("Cloudflare Access 身份已确认。");
-      return true;
+      current = await getProvider().getCurrentUser();
     } catch (caught) {
       const appError = toAppError(caught, "Access 会话检查失败。");
       setAuthenticated(false);
-      setStatus("signed-out");
+      setUserEmail("");
+      setCloudHead(null);
+      setStatus(appError.code === "OFFLINE" ? "offline" : "signed-out");
       setError(
         appError.code === "AUTH_REQUIRED"
           ? "尚未登录 Cloudflare Access。"
@@ -170,7 +200,76 @@ export const useCloudSync = <TPayload>({
       );
       return false;
     }
-  }, [getProvider]);
+
+    const appAvailable = current.apps.some(
+      (appItem) => appItem.id === APP_CONFIG.appId,
+    );
+    if (!appAvailable) {
+      setAuthenticated(false);
+      setUserEmail("");
+      setCloudHead(null);
+      setCloudHeadChecked(false);
+      setStatus("error");
+      setError(`同步服务没有返回当前 App：${APP_CONFIG.appId}。`);
+      return false;
+    }
+    setAuthenticated(true);
+    setUserEmail(current.user.email);
+    try {
+      await loadCloudHead();
+      setStatus("idle");
+      setMessage("Cloudflare Access 身份和云端信息已确认。");
+      return true;
+    } catch (caught) {
+      const appError = toAppError(caught, "云端信息查询失败。");
+      if (appError.code === "AUTH_REQUIRED") {
+        setAuthenticated(false);
+        setUserEmail("");
+        setCloudHead(null);
+        setStatus("signed-out");
+        setError("Access 会话已失效，请重新登录。");
+        return false;
+      }
+      setStatus(appError.code === "OFFLINE" ? "offline" : "error");
+      setError(`身份已确认，但${appError.message}`);
+      return true;
+    }
+  }, [getProvider, loadCloudHead]);
+
+  const refreshCloudHead = useCallback(async () => {
+    if (!authenticated) {
+      setStatus("signed-out");
+      setError("请先完成 Cloudflare Access 登录。");
+      return false;
+    }
+    if (!navigator.onLine) {
+      setStatus("offline");
+      setError("当前离线，无法刷新云端信息。");
+      return false;
+    }
+    setStatus("checking");
+    setMessage("");
+    setError("");
+    setCloudHeadChecked(false);
+    try {
+      await loadCloudHead();
+      setStatus("idle");
+      setMessage("云端信息已刷新。");
+      return true;
+    } catch (caught) {
+      const appError = toAppError(caught, "云端信息刷新失败。");
+      if (appError.code === "AUTH_REQUIRED") {
+        setAuthenticated(false);
+        setUserEmail("");
+        setCloudHead(null);
+        setStatus("signed-out");
+      } else {
+        setStatus(appError.code === "OFFLINE" ? "offline" : "error");
+      }
+      setError(appError.message);
+      return false;
+    }
+  }, [authenticated, loadCloudHead]);
 
   const syncNow = useCallback(
     () => execute((manager) => manager.sync(), "syncing", "本地与云端已同步。"),
@@ -192,6 +291,8 @@ export const useCloudSync = <TPayload>({
   const signIn = useCallback(() => {
     window.open(getProvider().loginUrl, "_blank", "noopener,noreferrer");
     setStatus("signed-out");
+    setCloudHead(null);
+    setCloudHeadChecked(false);
     setMessage("已打开 Access 登录页；完成后返回并点击“检查登录状态”。");
     setError("");
   }, [getProvider]);
@@ -204,6 +305,8 @@ export const useCloudSync = <TPayload>({
     );
     setAuthenticated(false);
     setUserEmail("");
+    setCloudHead(null);
+    setCloudHeadChecked(false);
     managerRef.current = null;
     setStatus("signed-out");
     setMessage("已打开 Access 退出页，本地数据不受影响。");
@@ -263,9 +366,12 @@ export const useCloudSync = <TPayload>({
     message,
     error,
     conflict,
+    cloudHead,
+    cloudHeadChecked,
     signIn,
     signOut,
     checkSession,
+    refreshCloudHead,
     syncNow,
     restoreRemote,
     resolveWithLocal,

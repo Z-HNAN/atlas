@@ -69,7 +69,31 @@ Atlas 正式 Origin SHALL 为 `https://atlas.app.10242020.xyz`。客户端 SHALL
 #### Scenario: 主动检查身份
 
 - **WHEN** 用户在设置或登录页点击“检查登录状态”
-- **THEN** 客户端请求 `/me?appId=atlas` 并更新当前会话状态
+- **THEN** 客户端先请求 `/me?appId=atlas`，身份成功后请求当前账号的 Head 元数据，并显示真实云端版本和云端最后同步时间
+
+#### Scenario: 主动刷新云端信息
+
+- **WHEN** 已登录用户点击“刷新云端信息”
+- **THEN** 客户端重新读取 Head 元数据；若云端不存在快照则明确显示尚无云端备份，不使用本地 lastCloudVersion 冒充当前云版本
+
+### Requirement: 真实云端元数据展示
+
+客户端 SHALL 通过 Zod 严格校验 Head 响应，只展示当前账号 Head 的真实 `version` 与服务端 `createdAt`。客户端 SHALL NOT 为展示云端信息下载快照正文、读取其它 App 数据、比较本地与云端谁更新，或以本地同步元数据代替查询结果。
+
+#### Scenario: 有效 Head
+
+- **WHEN** Head API 返回当前 Atlas 账号的有效元数据
+- **THEN** 设置页按浏览器本地时区显示云端版本和云端最后同步时间
+
+#### Scenario: Head 不存在
+
+- **WHEN** Head API 返回 `{ "head": null }`
+- **THEN** 设置页分别显示“尚无云端备份”和“尚未同步”
+
+#### Scenario: Head 查询失败或响应无效
+
+- **WHEN** 当前离线、请求失败、响应结构无效或 appId 不是 `atlas`
+- **THEN** 客户端显示错误且不把本地 lastCloudVersion 或 lastSyncAt 当作当前云端信息，IndexedDB 本地功能继续可用
 
 #### Scenario: 只修改本地
 

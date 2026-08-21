@@ -15,7 +15,7 @@ const statusText: Record<CloudSyncStatus, string> = {
   disabled: "未启用",
   "config-required": "等待配置",
   "signed-out": "未登录",
-  checking: "正在检查 Access 身份",
+  checking: "正在检查云端状态",
   idle: "可以同步",
   syncing: "正在同步",
   synced: "同步完成",
@@ -24,9 +24,18 @@ const statusText: Record<CloudSyncStatus, string> = {
   error: "同步失败",
 };
 
+const cloudTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
 const CloudSyncSettings = <TPayload,>({
   controller,
-  envelope,
 }: CloudSyncSettingsProps<TPayload>) => {
   const busy = ["checking", "syncing"].includes(controller.status);
 
@@ -111,11 +120,23 @@ const CloudSyncSettings = <TPayload,>({
             </div>
             <div>
               <dt>云端版本</dt>
-              <dd>{envelope?.sync.lastCloudVersion ?? "尚无"}</dd>
+              <dd>
+                {controller.cloudHeadChecked
+                  ? (controller.cloudHead?.version ?? "尚无云端备份")
+                  : "尚未查询"}
+              </dd>
             </div>
             <div>
-              <dt>最后同步</dt>
-              <dd>{envelope?.sync.lastSyncAt ?? "尚未同步"}</dd>
+              <dt>云端最后同步时间</dt>
+              <dd>
+                {controller.cloudHeadChecked
+                  ? controller.cloudHead
+                    ? cloudTimeFormatter.format(
+                        new Date(controller.cloudHead.createdAt),
+                      )
+                    : "尚未同步"
+                  : "尚未查询"}
+              </dd>
             </div>
           </dl>
 
@@ -202,6 +223,14 @@ const CloudSyncSettings = <TPayload,>({
             </div>
           )}
           <div className="form-actions compact-actions">
+            <button
+              className="secondary-btn"
+              type="button"
+              disabled={busy}
+              onClick={() => void controller.refreshCloudHead()}
+            >
+              {controller.status === "checking" ? "正在刷新…" : "刷新云端信息"}
+            </button>
             <button
               className="secondary-btn"
               type="button"

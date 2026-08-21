@@ -43,7 +43,7 @@ export const syncMeResponseSchema = z
   })
   .strict();
 
-export const uploadResultSchema = z
+export const cloudHeadMetadataSchema = z
   .object({
     appId: z.string().min(1),
     version: z.number().int().positive(),
@@ -55,6 +55,13 @@ export const uploadResultSchema = z
     idempotent: z.boolean(),
   })
   .strict();
+
+export const cloudHeadResponseSchema = z.union([
+  cloudHeadMetadataSchema,
+  z.object({ head: z.null() }).strict(),
+]);
+
+export const uploadResultSchema = cloudHeadMetadataSchema;
 
 export const apiErrorSchema = z
   .object({

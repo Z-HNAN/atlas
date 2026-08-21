@@ -8,6 +8,17 @@ export interface RemoteSnapshot<TPayload = unknown> {
   createdAt: string;
 }
 
+export interface CloudHeadMetadata {
+  appId: string;
+  version: number;
+  baseVersion: number;
+  commitId: string;
+  payloadSchemaVersion: number;
+  deviceId: string | null;
+  createdAt: string;
+  idempotent: boolean;
+}
+
 export interface SyncProvider<TPayload> {
   pullLatest(): Promise<RemoteSnapshot<unknown> | null>;
   push(input: {
